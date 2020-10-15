@@ -672,23 +672,23 @@ __global__ void constructQuadraticFormKernel(int nedges,
 
 	if (!(flag & EDGE_FLAG_FIXED_P))
 	{
-		// Hpp += = JPT*ƒ¶*JP
+		// Hpp += = JPT*Î©*JP
 		MatTMulMat<PDIM, MDIM, PDIM, ACCUM_ATOMIC>(JP, JP, Hpp.at(iP), omega);
 
-		// bp += = JPT*ƒ¶*r
+		// bp += = JPT*Î©*r
 		MatTMulVec<PDIM, MDIM, ACCUM_ATOMIC>(JP, error.data, bp.at(iP), omega);
 	}
 	if (!(flag & EDGE_FLAG_FIXED_L))
 	{
-		// Hll += = JLT*ƒ¶*JL
+		// Hll += = JLT*Î©*JL
 		MatTMulMat<LDIM, MDIM, LDIM, ACCUM_ATOMIC>(JL, JL, Hll.at(iL), omega);
 
-		// bl += = JLT*ƒ¶*r
+		// bl += = JLT*Î©*r
 		MatTMulVec<LDIM, MDIM, ACCUM_ATOMIC>(JL, error.data, bl.at(iL), omega);
 	}
 	if (!flag)
 	{
-		// Hpl += = JPT*ƒ¶*JL
+		// Hpl += = JPT*Î©*JL
 		MatTMulMat<PDIM, MDIM, LDIM, ASSIGN>(JP, JL, Hpl.at(iPL), omega);
 	}
 }

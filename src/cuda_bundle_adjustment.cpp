@@ -341,12 +341,12 @@ public:
 		const auto t0 = get_time_point();
 
 		////////////////////////////////////////////////////////////////////////////////////
-		// Build linear system about solution increments ƒ¢x
-		// H*ƒ¢x = -b
+		// Build linear system about solution increments Î”x
+		// H*Î”x = -b
 		// 
 		// coefficient matrix are divided into blocks, and each block is calculated
-		// | Hpp  Hpl ||ƒ¢xp| = |-bp|
-		// | HplT Hll ||ƒ¢xl|   |-bl|
+		// | Hpp  Hpl ||Î”xp| = |-bp|
+		// | HplT Hll ||Î”xl|   |-bl|
 		////////////////////////////////////////////////////////////////////////////////////
 
 		d_Hpp_.fillZero();
@@ -399,8 +399,8 @@ public:
 		const auto t1 = get_time_point();
 
 		////////////////////////////////////////////////////////////////////////////////////
-		// Solve linear equation about ƒ¢xp
-		// HSc*ƒ¢xp = bp
+		// Solve linear equation about Î”xp
+		// HSc*Î”xp = bp
 		////////////////////////////////////////////////////////////////////////////////////
 		gpu::convertHschureBSRToCSR(d_Hsc_, d_BSR2CSR_, d_HscCSR_);
 		const bool success = linearSolver_->solve(d_HscCSR_, d_bsc_.values(), d_xp_.values());
@@ -410,8 +410,8 @@ public:
 		const auto t2 = get_time_point();
 
 		////////////////////////////////////////////////////////////////////////////////////
-		// Solve linear equation about ƒ¢xl
-		// Hll*ƒ¢xl = -bl - HplT*ƒ¢xp
+		// Solve linear equation about Î”xl
+		// Hll*Î”xl = -bl - HplT*Î”xp
 		////////////////////////////////////////////////////////////////////////////////////
 		gpu::schurComplementPost(d_invHll_, d_bl_, d_Hpl_, d_xp_, d_xl_);
 
@@ -543,14 +543,14 @@ private:
 	GpuVec1b d_edgeFlags2D_, d_edgeFlags3D_;
 	GpuVec1i d_edge2Hpl_, d_edge2Hpl2D_, d_edge2Hpl3D_;
 
-	// solution increments ƒ¢x = [ƒ¢xp ƒ¢xl]
+	// solution increments Î”x = [Î”xp Î”xl]
 	GpuVec1d d_x_;
 	GpuPx1BlockVec d_xp_;
 	GpuLx1BlockVec d_xl_;
 
 	// coefficient matrix of linear system
-	// | Hpp  Hpl ||ƒ¢xp| = |-bp|
-	// | HplT Hll ||ƒ¢xl|   |-bl|
+	// | Hpp  Hpl ||Î”xp| = |-bp|
+	// | HplT Hll ||Î”xl|   |-bl|
 	GpuPxPBlockVec d_Hpp_;
 	GpuLxLBlockVec d_Hll_;
 	GpuHplBlockMat d_Hpl_;
