@@ -98,7 +98,7 @@ $ ./samples/sample_ba_from_file/sample_ba_from_file ../samples/ba_input/ba_kitti
 ```
 
 <details>
-<summary>output example of `sample_ba_from_file`</summary>
+<summary>output example of sample_ba_from_file</summary>
 
 ```
 $ ./samples/sample_ba_from_file/sample_ba_from_file ../samples/ba_input/ba_kitti_00.json
@@ -139,7 +139,7 @@ iter: 10, chi2: 320086.4
 </details>
 
 <details>
-<summary>output example of `sample_comparison_with_g2o`</summary>
+<summary>output example of sample_comparison_with_g2o</summary>
 
 ```
 $ ./samples/sample_comparison_with_g2o/sample_comparison_with_g2o ../samples/ba_input/ba_kitti_00.json
