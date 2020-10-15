@@ -15,7 +15,7 @@ This project is designed to provide following g2o features, which are commonly u
 - `g2o::EdgeSE3ProjectXYZ`
 - `g2o::EdgeStereoSE3ProjectXYZ`
 
-For example, see [Use cuda-bundle-adjustment in ORB-SLAM2]().
+For example, see [Use cuda-bundle-adjustment in ORB-SLAM2](https://github.com/fixstars/cuda-bundle-adjustment/wiki/Use-cuda-bundle-adjustment-in-ORB-SLAM2).
 
 ## Performance
 
