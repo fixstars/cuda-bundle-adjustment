@@ -34,7 +34,7 @@ using OptimizerCPU = g2o::SparseOptimizer;
 using OptimizerGPU = cuba::CudaBundleAdjustment;
 
 static void readGraph(const std::string& filename, OptimizerCPU& optimizerCPU, OptimizerGPU& optimizerGPU,
-	std::vector<int>& poseIds, std::vector<int>& landmarkIds, const bool& bRobust=true);
+	std::vector<int>& poseIds, std::vector<int>& landmarkIds, bool& bRobust=true);
 
 // use memory manager for vertices and edges, since CudaBundleAdjustment doesn't delete those pointers
 static cuba::ObjectCreator obj;
@@ -152,7 +152,7 @@ static inline cuba::Array<T, N> getArray(const cv::FileNode& node)
 }
 
 static void readGraph(const std::string& filename, OptimizerCPU& optimizerCPU, OptimizerGPU& optimizerGPU,
-	std::vector<int>& poseIds, std::vector<int>& landmarkIds, const bool& bRobust)
+	std::vector<int>& poseIds, std::vector<int>& landmarkIds, bool& bRobust)
 {
 	cv::FileStorage fs(filename, cv::FileStorage::READ);
 	CV_Assert(fs.isOpened());
@@ -176,7 +176,7 @@ static void readGraph(const std::string& filename, OptimizerCPU& optimizerCPU, O
 
 	optimizerGPU.setCameraPrams(camera);
 
-	const float thHuber2D = std::sqrt(5.99);
+	const float thHuber2D = std::sqrt(1);
 
 	// read pose vertices
 	for (const auto& node : fs["pose_vertices"])
