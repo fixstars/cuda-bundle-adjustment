@@ -123,7 +123,7 @@ int main(int argc, char** argv)
 	double errorSqP = 0;
 	for (int id : landmarkIds)
 	{
-		const auto vcpu = (g2o::VertexSBAPointXYZ*)optimizerCPU->vertex(id);
+		const auto vcpu = (g2o::VertexPointXYZ*)optimizerCPU->vertex(id);
 		const auto vgpu = optimizerGPU->landmarkVertex(id);
 		const auto pdiff = vcpu->estimate() - vgpu->Xw;
 		errorSqP += pdiff.dot(pdiff);
@@ -206,7 +206,7 @@ static void readGraph(const std::string& filename, OptimizerCPU& optimizerCPU, O
 		const auto Xw = getArray<double, 3>(node["Xw"]);
 
 		// add landmark vertex to CPU optimizer
-		auto vcpu = new g2o::VertexSBAPointXYZ();
+		auto vcpu = new g2o::VertexPointXYZ();
 		vcpu->setEstimate(Xw);
 		vcpu->setId(id);
 		vcpu->setFixed(fixed);
