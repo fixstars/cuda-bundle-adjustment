@@ -26,7 +26,7 @@ limitations under the License.
 #include <g2o/core/optimization_algorithm_levenberg.h>
 #include <g2o/solvers/eigen/linear_solver_eigen.h>
 #include <g2o/types/sba/types_six_dof_expmap.h>
-
+#include <g2o/core/robust_kernel_impl.h>
 #include <cuda_bundle_adjustment.h>
 #include <object_creator.h>
 
@@ -34,7 +34,7 @@ using OptimizerCPU = g2o::SparseOptimizer;
 using OptimizerGPU = cuba::CudaBundleAdjustment;
 
 static void readGraph(const std::string& filename, OptimizerCPU& optimizerCPU, OptimizerGPU& optimizerGPU,
-	std::vector<int>& poseIds, std::vector<int>& landmarkIds);
+	std::vector<int>& poseIds, std::vector<int>& landmarkIds, bool bRobust=true);
 
 // use memory manager for vertices and edges, since CudaBundleAdjustment doesn't delete those pointers
 static cuba::ObjectCreator obj;
@@ -152,7 +152,7 @@ static inline cuba::Array<T, N> getArray(const cv::FileNode& node)
 }
 
 static void readGraph(const std::string& filename, OptimizerCPU& optimizerCPU, OptimizerGPU& optimizerGPU,
-	std::vector<int>& poseIds, std::vector<int>& landmarkIds)
+	std::vector<int>& poseIds, std::vector<int>& landmarkIds, bool bRobust)
 {
 	cv::FileStorage fs(filename, cv::FileStorage::READ);
 	CV_Assert(fs.isOpened());
@@ -175,6 +175,8 @@ static void readGraph(const std::string& filename, OptimizerCPU& optimizerCPU, O
 	camera.bf = fs["bf"];
 
 	optimizerGPU.setCameraPrams(camera);
+
+	const float thHuber2D = std::sqrt(1);
 
 	// read pose vertices
 	for (const auto& node : fs["pose_vertices"])
@@ -234,6 +236,12 @@ static void readGraph(const std::string& filename, OptimizerCPU& optimizerCPU, O
 		ecpu->setVertex(1, optimizerCPU.vertex(iP));
 		ecpu->setMeasurement(measurement);
 		ecpu->setInformation(information * Eigen::Matrix2d::Identity());
+		if(bRobust)
+		{
+			g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
+			ecpu->setRobustKernel(rk);
+			rk->setDelta(thHuber2D);
+		}
 		ecpu->fx = camera.fx;
 		ecpu->fy = camera.fy;
 		ecpu->cx = camera.cx;
