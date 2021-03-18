@@ -34,7 +34,7 @@ using OptimizerCPU = g2o::SparseOptimizer;
 using OptimizerGPU = cuba::CudaBundleAdjustment;
 
 static void readGraph(const std::string& filename, OptimizerCPU& optimizerCPU, OptimizerGPU& optimizerGPU,
-	std::vector<int>& poseIds, std::vector<int>& landmarkIds, bool& bRobust=true);
+	std::vector<int>& poseIds, std::vector<int>& landmarkIds, bool bRobust=true);
 
 // use memory manager for vertices and edges, since CudaBundleAdjustment doesn't delete those pointers
 static cuba::ObjectCreator obj;
@@ -152,7 +152,7 @@ static inline cuba::Array<T, N> getArray(const cv::FileNode& node)
 }
 
 static void readGraph(const std::string& filename, OptimizerCPU& optimizerCPU, OptimizerGPU& optimizerGPU,
-	std::vector<int>& poseIds, std::vector<int>& landmarkIds, bool& bRobust)
+	std::vector<int>& poseIds, std::vector<int>& landmarkIds, bool bRobust)
 {
 	cv::FileStorage fs(filename, cv::FileStorage::READ);
 	CV_Assert(fs.isOpened());
