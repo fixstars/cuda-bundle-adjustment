@@ -208,6 +208,48 @@ __device__ inline void MatMulMatT(const Scalar* A, const Scalar* B, Scalar* C)
 		MatMulVec<L, M, N, OP>(A, B + i, C + i * L);
 }
 
+// huber
+/*
+template <int N>
+__device__ inline Scalar huber_(const Scalar* a, const Scalar eps)
+{
+	Scalar temp;
+	Scalar x = a[N-1];
+	if(x > eps)	temp = eps * x - eps * eps / 2;
+	else if(x < -eps) temp = eps * (-x) - eps * eps / 2;
+	else temp = x * x / 2;
+
+	return huber_<N - 1>(a, eps) + temp;
+}
+
+template <>
+__device__ inline Scalar huber_<1>(const Scalar* a, const Scalar eps)
+{
+	Scalar temp;
+	Scalar x = a[0];
+	if(x > eps)	temp = eps * x - eps * eps / 2;
+	else if(x < -eps) temp = eps * (-x) - eps * eps / 2;
+	else temp = x * x / 2;
+	return temp;
+}
+*/
+
+template <int N>
+__device__ inline Scalar huber_(const Scalar* a, const Scalar eps)
+{
+	Scalar x = dot_<N>(a, a);
+	Scalar temp;
+	Scalar eps2 = eps * eps;
+	if(x <= eps2) temp = x;
+	else temp = 2 * sqrt(x) * eps - eps2;
+	return temp;
+}
+
+template <int N>
+__device__ inline Scalar huberCost(const Scalar* x, const Scalar eps) { return huber_<N>(x, eps);}
+template <int N>
+__device__ inline Scalar huberCost(const Vecxd<N>& x, const Scalar eps) { return huberCost<N>(x.data, eps);}
+
 // squared L2 norm
 template <int N>
 __device__ inline Scalar squaredNorm(const Scalar* x) { return dot_<N>(x, x); }
@@ -626,7 +668,9 @@ __global__ void computeActiveErrorsKernel(int nedges,
 		errors[iE] = error;
 		Xcs[iE] = Xc;
 
-		sumchi += omegas[iE] * squaredNorm(error);
+		//KOKO
+		//sumchi += omegas[iE] * squaredNorm(error);
+		sumchi += omegas[iE] * huberCost(error, 10.0);
 	}
 
 	cache[sharedIdx] = sumchi;
