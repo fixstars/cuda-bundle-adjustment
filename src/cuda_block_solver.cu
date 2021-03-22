@@ -670,7 +670,8 @@ __global__ void computeActiveErrorsKernel(int nedges,
 
 		//KOKO
 		//sumchi += omegas[iE] * squaredNorm(error);
-		sumchi += omegas[iE] * huberCost(error, 10.0);
+		const Scalar eps = 1.0;
+		sumchi += omegas[iE] * huberCost(error, eps);
 	}
 
 	cache[sharedIdx] = sumchi;
@@ -699,7 +700,8 @@ __global__ void constructQuadraticFormKernel(int nedges,
 	if (iE >= nedges)
 		return;
 
-	const Scalar omega = omegas[iE];
+	//const Scalar omega = omegas[iE];
+	const Scalar eps = 1.0;
 	const int iP = edge2PL[iE][0];
 	const int iL = edge2PL[iE][1];
 	const int iPL = edge2Hpl[iE];
@@ -708,6 +710,13 @@ __global__ void constructQuadraticFormKernel(int nedges,
 	const Vec4d& q = qs[iP];
 	const Vec3d& Xc = Xcs[iE];
 	const Vecmd& error = errors[iE];
+
+	// Huber Jacobian
+	Scalar e = squaredNorm(error);
+	Scalar rho1;
+	if (e <= eps * eps) rho1 = 1.0;
+	else rho1 = eps / sqrt(e);
+	Scalar omega = omegas[iE] * rho1;
 
 	// compute Jacobians
 	Scalar JP[MDIM * PDIM];
