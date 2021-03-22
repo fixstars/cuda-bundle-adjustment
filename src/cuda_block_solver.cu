@@ -213,11 +213,11 @@ __device__ inline void MatMulMatT(const Scalar* A, const Scalar* B, Scalar* C)
 template <int N>
 __device__ inline Scalar huber_(const Scalar* a, const Scalar eps)
 {
+	Scalar x = a[N-1] * a[N-1];
 	Scalar temp;
-	Scalar x = a[N-1];
-	if(x > eps)	temp = eps * x - eps * eps / 2;
-	else if(x < -eps) temp = eps * (-x) - eps * eps / 2;
-	else temp = x * x / 2;
+	Scalar eps2 = eps * eps;
+	if(x <= eps2) temp = x;
+	else temp = 2 * sqrt(x) * eps - eps2;
 
 	return huber_<N - 1>(a, eps) + temp;
 }
@@ -225,15 +225,14 @@ __device__ inline Scalar huber_(const Scalar* a, const Scalar eps)
 template <>
 __device__ inline Scalar huber_<1>(const Scalar* a, const Scalar eps)
 {
+	Scalar x = a[0] * a[0];
 	Scalar temp;
-	Scalar x = a[0];
-	if(x > eps)	temp = eps * x - eps * eps / 2;
-	else if(x < -eps) temp = eps * (-x) - eps * eps / 2;
-	else temp = x * x / 2;
+	Scalar eps2 = eps * eps;
+	if(x <= eps2) temp = x;
+	else temp = 2 * sqrt(x) * eps - eps2;
 	return temp;
 }
 */
-
 template <int N>
 __device__ inline Scalar huber_(const Scalar* a, const Scalar eps)
 {
@@ -250,6 +249,11 @@ __device__ inline Scalar huberCost(const Scalar* x, const Scalar eps) { return h
 template <int N>
 __device__ inline Scalar huberCost(const Vecxd<N>& x, const Scalar eps) { return huberCost<N>(x.data, eps);}
 
+__device__ static inline Scalar huber(const Scalar chi2, const Scalar eps)
+{
+	if(chi2 <= eps * eps) return chi2;
+	else return 2 * sqrt(chi2) * eps - (eps * eps);
+}
 // squared L2 norm
 template <int N>
 __device__ inline Scalar squaredNorm(const Scalar* x) { return dot_<N>(x, x); }
@@ -668,12 +672,10 @@ __global__ void computeActiveErrorsKernel(int nedges,
 		errors[iE] = error;
 		Xcs[iE] = Xc;
 
-		//KOKO
 		//sumchi += omegas[iE] * squaredNorm(error);
 		const Scalar eps = 1.0;
-		sumchi += omegas[iE] * huberCost(error, eps);
+		sumchi += omegas[iE] * huber(squaredNorm(error), eps);
 	}
-
 	cache[sharedIdx] = sumchi;
 	__syncthreads();
 
@@ -713,9 +715,8 @@ __global__ void constructQuadraticFormKernel(int nedges,
 
 	// Huber Jacobian
 	Scalar e = squaredNorm(error);
-	Scalar rho1;
-	if (e <= eps * eps) rho1 = 1.0;
-	else rho1 = eps / sqrt(e);
+	Scalar rho1 = 1.0;
+	if (e > eps * eps) rho1 = eps / sqrt(e);
 	Scalar omega = omegas[iE] * rho1;
 
 	// compute Jacobians
