@@ -215,6 +215,12 @@ __device__ static inline Scalar huber(const Scalar chi2, const Scalar delta)
 	if(chi2 <= delta * delta) return chi2;
 	else return 2 * sqrt(chi2) * delta - (delta * delta);
 }
+__device__ static inline Scalar huberJacobian(const Scalar chi2, const Scalar delta)
+{
+	if(chi2 <= delta * delta) return 1.0;
+	else return delta / sqrt(chi2);
+
+}
 // squared L2 norm
 template <int N>
 __device__ inline Scalar squaredNorm(const Scalar* x) { return dot_<N>(x, x); }
@@ -673,9 +679,8 @@ __global__ void constructQuadraticFormKernel(int nedges,
 	const Vecmd& error = errors[iE];
 
 	// Huber Jacobian
-	Scalar e = squaredNorm(error) * omegas[iE];
-	Scalar rho1 = 1.0;
-	if (e > HUBER_DELTA * HUBER_DELTA) rho1 = HUBER_DELTA / sqrt(e);
+	const Scalar e = squaredNorm(error) * omegas[iE];
+	Scalar rho1 = huberJacobian(e, HUBER_DELTA);
 	Scalar omega = omegas[iE] * rho1;
 
 	// compute Jacobians
