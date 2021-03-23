@@ -681,7 +681,7 @@ __global__ void constructQuadraticFormKernel(int nedges,
 	// Huber Jacobian
 	const Scalar e = squaredNorm(error) * omegas[iE];
 	const Scalar rho1 = huberJacobian(e, HUBER_DELTA);
-	Scalar omega = omegas[iE] * rho1;
+	const Scalar omega = omegas[iE] * rho1;
 
 	// compute Jacobians
 	Scalar JP[MDIM * PDIM];
