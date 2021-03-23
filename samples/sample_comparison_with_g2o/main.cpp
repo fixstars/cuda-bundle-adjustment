@@ -269,6 +269,12 @@ static void readGraph(const std::string& filename, OptimizerCPU& optimizerCPU, O
 		ecpu->setVertex(1, optimizerCPU.vertex(iP));
 		ecpu->setMeasurement(measurement);
 		ecpu->setInformation(information * Eigen::Matrix3d::Identity());
+		if(bRobust)
+		{
+			g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
+			ecpu->setRobustKernel(rk);
+			rk->setDelta(thHuber2D);
+		}
 		ecpu->fx = camera.fx;
 		ecpu->fy = camera.fy;
 		ecpu->cx = camera.cx;
