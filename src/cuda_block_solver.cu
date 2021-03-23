@@ -52,6 +52,7 @@ using Lx1BlockPtr = BlockPtr<Scalar, LDIM, 1>;
 constexpr int BLOCK_ACTIVE_ERRORS = 512;
 constexpr int BLOCK_MAX_DIAGONAL = 512;
 constexpr int BLOCK_COMPUTE_SCALE = 512;
+constexpr Scalar HUBER_DELTA = 1.0;
 
 __constant__ Scalar c_camera[5];
 #define FX() c_camera[0]
@@ -209,10 +210,10 @@ __device__ inline void MatMulMatT(const Scalar* A, const Scalar* B, Scalar* C)
 }
 
 // huber
-__device__ static inline Scalar huber(const Scalar chi2, const Scalar eps)
+__device__ static inline Scalar huber(const Scalar chi2, const Scalar delta)
 {
-	if(chi2 <= eps * eps) return chi2;
-	else return 2 * sqrt(chi2) * eps - (eps * eps);
+	if(chi2 <= delta * delta) return chi2;
+	else return 2 * sqrt(chi2) * delta - (delta * delta);
 }
 // squared L2 norm
 template <int N>
@@ -633,8 +634,7 @@ __global__ void computeActiveErrorsKernel(int nedges,
 		Xcs[iE] = Xc;
 
 		//sumchi += omegas[iE] * squaredNorm(error);
-		const Scalar eps = 1.0;
-		sumchi += huber(squaredNorm(error) * omegas[iE], eps);
+		sumchi += huber(squaredNorm(error) * omegas[iE], HUBER_DELTA);
 	}
 	cache[sharedIdx] = sumchi;
 	__syncthreads();
@@ -663,7 +663,6 @@ __global__ void constructQuadraticFormKernel(int nedges,
 		return;
 
 	//const Scalar omega = omegas[iE];
-	const Scalar eps = 1.0;
 	const int iP = edge2PL[iE][0];
 	const int iL = edge2PL[iE][1];
 	const int iPL = edge2Hpl[iE];
@@ -676,7 +675,7 @@ __global__ void constructQuadraticFormKernel(int nedges,
 	// Huber Jacobian
 	Scalar e = squaredNorm(error) * omegas[iE];
 	Scalar rho1 = 1.0;
-	if (e > eps * eps) rho1 = eps / sqrt(e);
+	if (e > HUBER_DELTA * HUBER_DELTA) rho1 = HUBER_DELTA / sqrt(e);
 	Scalar omega = omegas[iE] * rho1;
 
 	// compute Jacobians
