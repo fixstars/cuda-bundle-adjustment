@@ -209,46 +209,6 @@ __device__ inline void MatMulMatT(const Scalar* A, const Scalar* B, Scalar* C)
 }
 
 // huber
-/*
-template <int N>
-__device__ inline Scalar huber_(const Scalar* a, const Scalar eps)
-{
-	Scalar x = a[N-1] * a[N-1];
-	Scalar temp;
-	Scalar eps2 = eps * eps;
-	if(x <= eps2) temp = x;
-	else temp = 2 * sqrt(x) * eps - eps2;
-
-	return huber_<N - 1>(a, eps) + temp;
-}
-
-template <>
-__device__ inline Scalar huber_<1>(const Scalar* a, const Scalar eps)
-{
-	Scalar x = a[0] * a[0];
-	Scalar temp;
-	Scalar eps2 = eps * eps;
-	if(x <= eps2) temp = x;
-	else temp = 2 * sqrt(x) * eps - eps2;
-	return temp;
-}
-*/
-template <int N>
-__device__ inline Scalar huber_(const Scalar* a, const Scalar eps)
-{
-	Scalar x = dot_<N>(a, a);
-	Scalar temp;
-	Scalar eps2 = eps * eps;
-	if(x <= eps2) temp = x;
-	else temp = 2 * sqrt(x) * eps - eps2;
-	return temp;
-}
-
-template <int N>
-__device__ inline Scalar huberCost(const Scalar* x, const Scalar eps) { return huber_<N>(x, eps);}
-template <int N>
-__device__ inline Scalar huberCost(const Vecxd<N>& x, const Scalar eps) { return huberCost<N>(x.data, eps);}
-
 __device__ static inline Scalar huber(const Scalar chi2, const Scalar eps)
 {
 	if(chi2 <= eps * eps) return chi2;
@@ -674,7 +634,7 @@ __global__ void computeActiveErrorsKernel(int nedges,
 
 		//sumchi += omegas[iE] * squaredNorm(error);
 		const Scalar eps = 1.0;
-		sumchi += omegas[iE] * huber(squaredNorm(error), eps);
+		sumchi += huber(squaredNorm(error) * omegas[iE], eps);
 	}
 	cache[sharedIdx] = sumchi;
 	__syncthreads();
@@ -714,7 +674,7 @@ __global__ void constructQuadraticFormKernel(int nedges,
 	const Vecmd& error = errors[iE];
 
 	// Huber Jacobian
-	Scalar e = squaredNorm(error);
+	Scalar e = squaredNorm(error) * omegas[iE];
 	Scalar rho1 = 1.0;
 	if (e > eps * eps) rho1 = eps / sqrt(e);
 	Scalar omega = omegas[iE] * rho1;
