@@ -216,7 +216,7 @@ __device__ static inline Scalar huber(const Scalar chi2, const Scalar delta)
 	if(chi2 <= delta * delta) return chi2;
 	else return 2 * sqrt(chi2) * delta - (delta * delta);
 }
-__device__ static inline Scalar huberJacobian(const Scalar chi2, const Scalar delta)
+__device__ static inline Scalar huberDerivative(const Scalar chi2, const Scalar delta)
 {
 	if(chi2 <= delta * delta) return 1.0;
 	else return delta / sqrt(chi2);
@@ -237,7 +237,7 @@ __device__ static inline Scalar tukey(const Scalar chi2, const Scalar delta)
 		return delta2 / 3;
 	}
 }
-__device__ static inline Scalar tukeyJacobian(const Scalar chi2, const Scalar delta)
+__device__ static inline Scalar tukeyDerivative(const Scalar chi2, const Scalar delta)
 {
 	const Scalar chi = sqrt(chi2);
 	const Scalar delta2 = delta * delta;
@@ -275,17 +275,17 @@ enum RobustKernelType
 struct RobustKernelNone
 {
   __device__ inline Scalar robustify(const Scalar x) { return x; }
-  __device__ inline Scalar jacobian(const Scalar x) { return 1.0f; }
+  __device__ inline Scalar derivative(const Scalar x) { return Scalar(1); }
 };
 struct RobustKernelHuber
 {
   __device__ inline Scalar robustify(const Scalar x) { return huber(x, HUBER_DELTA); }
-  __device__ inline Scalar jacobian(const Scalar x) { return huberJacobian(x, HUBER_DELTA); }
+  __device__ inline Scalar derivative(const Scalar x) { return huberDerivative(x, HUBER_DELTA); }
 };
 struct RobustKernelTukey
 {
   __device__ inline Scalar robustify(const Scalar x) { return tukey(x, TUKEY_DELTA); }
-  __device__ inline Scalar jacobian(const Scalar x) { return tukeyJacobian(x, TUKEY_DELTA); }
+  __device__ inline Scalar derivative(const Scalar x) { return tukeyDerivative(x, TUKEY_DELTA); }
 };
 
 ////////////////////////////////////////////////////////////////////////////////////
@@ -733,9 +733,9 @@ __global__ void constructQuadraticFormKernel(int nedges,
 	const Vec3d& Xc = Xcs[iE];
 	const Vecmd& error = errors[iE];
 
-	// Huber Jacobian
+	// Huber Derivative
 	const Scalar e = squaredNorm(error) * omegas[iE];
-	const Scalar rho1 = robustKernel.jacobian(e);
+	const Scalar rho1 = robustKernel.derivative(e);
 	const Scalar omega = omegas[iE] * rho1;
 
 	// compute Jacobians
