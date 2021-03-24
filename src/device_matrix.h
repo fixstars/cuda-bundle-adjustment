@@ -21,6 +21,7 @@ limitations under the License.
 #include "constants.h"
 #include "fixed_vector.h"
 #include "device_buffer.h"
+#include "cuda_bundle_adjustment_constants.h"
 
 namespace cuba
 {

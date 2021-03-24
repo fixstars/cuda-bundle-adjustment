@@ -18,6 +18,7 @@ limitations under the License.
 #define __CUDA_BUNDLE_ADJUSTMENT_H__
 
 #include "cuda_bundle_adjustment_types.h"
+#include "cuda_bundle_adjustment_constants.h"
 
 namespace cuba
 {
@@ -114,6 +115,10 @@ public:
 	/** @brief Returns the time profile.
 	*/
 	virtual const TimeProfile& timeProfile() = 0;
+
+	/** @brief Set robust kernel
+	*/
+	virtual void setRobustKernel(RobustKernelType type) = 0;
 
 	/** @brief the destructor.
 	*/
