@@ -177,6 +177,7 @@ static void readGraph(const std::string& filename, OptimizerCPU& optimizerCPU, O
 	optimizerGPU.setCameraPrams(camera);
 
 	const float thHuber2D = std::sqrt(1);
+	const float thTukey2D = std::sqrt(1);
 
 	// read pose vertices
 	for (const auto& node : fs["pose_vertices"])
@@ -238,9 +239,9 @@ static void readGraph(const std::string& filename, OptimizerCPU& optimizerCPU, O
 		ecpu->setInformation(information * Eigen::Matrix2d::Identity());
 		if(bRobust)
 		{
-			g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
+			g2o::RobustKernelTukey* rk = new g2o::RobustKernelTukey;
 			ecpu->setRobustKernel(rk);
-			rk->setDelta(thHuber2D);
+			rk->setDelta(thTukey2D);
 		}
 		ecpu->fx = camera.fx;
 		ecpu->fy = camera.fy;
@@ -271,9 +272,9 @@ static void readGraph(const std::string& filename, OptimizerCPU& optimizerCPU, O
 		ecpu->setInformation(information * Eigen::Matrix3d::Identity());
 		if(bRobust)
 		{
-			g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
+			g2o::RobustKernelTukey* rk = new g2o::RobustKernelTukey;
 			ecpu->setRobustKernel(rk);
-			rk->setDelta(thHuber2D);
+			rk->setDelta(thTukey2D);
 		}
 		ecpu->fx = camera.fx;
 		ecpu->fy = camera.fy;
