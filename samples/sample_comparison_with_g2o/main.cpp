@@ -239,9 +239,14 @@ static void readGraph(const std::string& filename, OptimizerCPU& optimizerCPU, O
 		ecpu->setInformation(information * Eigen::Matrix2d::Identity());
 		if(bRobust)
 		{
-			g2o::RobustKernelTukey* rk = new g2o::RobustKernelTukey;
+			g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
 			ecpu->setRobustKernel(rk);
 			rk->setDelta(thTukey2D);
+			optimizerGPU.setRobustKernel(cuba::ROBUST_KERNEL_HUBER);
+		}
+		else
+		{
+			optimizerGPU.setRobustKernel(cuba::ROBUST_KERNEL_NONE);
 		}
 		ecpu->fx = camera.fx;
 		ecpu->fy = camera.fy;
@@ -272,9 +277,14 @@ static void readGraph(const std::string& filename, OptimizerCPU& optimizerCPU, O
 		ecpu->setInformation(information * Eigen::Matrix3d::Identity());
 		if(bRobust)
 		{
-			g2o::RobustKernelTukey* rk = new g2o::RobustKernelTukey;
+			g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
 			ecpu->setRobustKernel(rk);
 			rk->setDelta(thTukey2D);
+			optimizerGPU.setRobustKernel(cuba::ROBUST_KERNEL_HUBER);
+		}
+		else
+		{
+			optimizerGPU.setRobustKernel(cuba::ROBUST_KERNEL_NONE);
 		}
 		ecpu->fx = camera.fx;
 		ecpu->fy = camera.fy;
