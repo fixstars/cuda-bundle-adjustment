@@ -52,8 +52,8 @@ using Lx1BlockPtr = BlockPtr<Scalar, LDIM, 1>;
 constexpr int BLOCK_ACTIVE_ERRORS = 512;
 constexpr int BLOCK_MAX_DIAGONAL = 512;
 constexpr int BLOCK_COMPUTE_SCALE = 512;
-constexpr Scalar HUBER_DELTA = 1.0;
-constexpr Scalar TUKEY_DELTA = 1.0;
+constexpr Scalar HUBER_DELTA = 1;
+constexpr Scalar TUKEY_DELTA = 1;
 
 __constant__ Scalar c_camera[5];
 #define FX() c_camera[0]
