@@ -28,7 +28,7 @@ limitations under the License.
 namespace cuba
 {
 namespace gpu
-{
+{	
 
 ////////////////////////////////////////////////////////////////////////////////////
 // Type alias
@@ -52,7 +52,8 @@ using Lx1BlockPtr = BlockPtr<Scalar, LDIM, 1>;
 constexpr int BLOCK_ACTIVE_ERRORS = 512;
 constexpr int BLOCK_MAX_DIAGONAL = 512;
 constexpr int BLOCK_COMPUTE_SCALE = 512;
-constexpr Scalar HUBER_DELTA = 1.0;
+constexpr Scalar HUBER_DELTA = 1;
+constexpr Scalar TUKEY_DELTA = 1;
 
 __constant__ Scalar c_camera[5];
 #define FX() c_camera[0]
@@ -215,11 +216,40 @@ __device__ static inline Scalar huber(const Scalar chi2, const Scalar delta)
 	if(chi2 <= delta * delta) return chi2;
 	else return 2 * sqrt(chi2) * delta - (delta * delta);
 }
-__device__ static inline Scalar huberJacobian(const Scalar chi2, const Scalar delta)
+__device__ static inline Scalar huberDerivative(const Scalar chi2, const Scalar delta)
 {
 	if(chi2 <= delta * delta) return 1.0;
 	else return delta / sqrt(chi2);
 
+}
+// tukey
+__device__ static inline Scalar tukey(const Scalar chi2, const Scalar delta)
+{
+	const Scalar chi = sqrt(chi2);
+	const Scalar delta2 = delta * delta;
+	if(chi <= delta)
+	{
+		const Scalar aux = chi2 / delta2;
+		return delta2 * (1. - pow((1. - aux), 3)) / 3.;
+	}
+	else
+	{
+		return delta2 / 3;
+	}
+}
+__device__ static inline Scalar tukeyDerivative(const Scalar chi2, const Scalar delta)
+{
+	const Scalar chi = sqrt(chi2);
+	const Scalar delta2 = delta * delta;
+	if(chi <= delta)
+	{
+		const Scalar aux = chi2 / delta2;
+		return pow((1. - aux), 2);
+	}
+	else
+	{
+		return 0;
+	}
 }
 // squared L2 norm
 template <int N>
@@ -232,6 +262,31 @@ template <int N>
 __device__ inline Scalar norm(const Scalar* x) { return sqrt(squaredNorm<N>(x)); }
 template <int N>
 __device__ inline Scalar norm(const Vecxd<N>& x) { return norm<N>(x.data); }
+
+////////////////////////////////////////////////////////////////////////////////////
+// Robust kernel
+////////////////////////////////////////////////////////////////////////////////////
+enum RobustKernelType
+{
+	ROBUST_KERNEL_NONE = 0,
+	ROBUST_KERNEL_HUBER = 1,
+	ROBUST_KERNEL_TUKEY = 2,
+};
+struct RobustKernelNone
+{
+  __device__ inline Scalar robustify(const Scalar x) { return x; }
+  __device__ inline Scalar derivative(const Scalar x) { return Scalar(1); }
+};
+struct RobustKernelHuber
+{
+  __device__ inline Scalar robustify(const Scalar x) { return huber(x, HUBER_DELTA); }
+  __device__ inline Scalar derivative(const Scalar x) { return huberDerivative(x, HUBER_DELTA); }
+};
+struct RobustKernelTukey
+{
+  __device__ inline Scalar robustify(const Scalar x) { return tukey(x, TUKEY_DELTA); }
+  __device__ inline Scalar derivative(const Scalar x) { return tukeyDerivative(x, TUKEY_DELTA); }
+};
 
 ////////////////////////////////////////////////////////////////////////////////////
 // Device functions
@@ -601,10 +656,10 @@ __device__ inline Vec3i makeVec3i(int i, int j, int k)
 ////////////////////////////////////////////////////////////////////////////////////
 // Kernel functions
 ////////////////////////////////////////////////////////////////////////////////////
-template <int MDIM>
+template <int MDIM, class RobustKernel>
 __global__ void computeActiveErrorsKernel(int nedges,
 	const Vec4d* qs, const Vec3d* ts, const Vec3d* Xws, const Vecxd<MDIM>* measurements,
-	const Scalar* omegas, const Vec2i* edge2PL, Vecxd<MDIM>* errors, Vec3d* Xcs, Scalar* chi)
+	const Scalar* omegas, const Vec2i* edge2PL, Vecxd<MDIM>* errors, Vec3d* Xcs, Scalar* chi, RobustKernel robustKernel)
 {
 	using Vecmd = Vecxd<MDIM>;
 
@@ -640,7 +695,7 @@ __global__ void computeActiveErrorsKernel(int nedges,
 		Xcs[iE] = Xc;
 
 		//sumchi += omegas[iE] * squaredNorm(error);
-		sumchi += huber(squaredNorm(error) * omegas[iE], HUBER_DELTA);
+		sumchi += robustKernel.robustify(omegas[iE] * squaredNorm(error));
 	}
 	cache[sharedIdx] = sumchi;
 	__syncthreads();
@@ -656,11 +711,11 @@ __global__ void computeActiveErrorsKernel(int nedges,
 		atomicAdd(chi, cache[0]);
 }
 
-template <int MDIM>
+template <int MDIM, class RobustKernel>
 __global__ void constructQuadraticFormKernel(int nedges,
 	const Vec3d* Xcs, const Vec4d* qs, const Vecxd<MDIM>* errors,
 	const Scalar* omegas, const Vec2i* edge2PL, const int* edge2Hpl, const uint8_t* flags,
-	PxPBlockPtr Hpp, Px1BlockPtr bp, LxLBlockPtr Hll, Lx1BlockPtr bl, PxLBlockPtr Hpl)
+	PxPBlockPtr Hpp, Px1BlockPtr bp, LxLBlockPtr Hll, Lx1BlockPtr bl, PxLBlockPtr Hpl, RobustKernel robustKernel)
 {
 	using Vecmd = Vecxd<MDIM>;
 
@@ -678,9 +733,9 @@ __global__ void constructQuadraticFormKernel(int nedges,
 	const Vec3d& Xc = Xcs[iE];
 	const Vecmd& error = errors[iE];
 
-	// Huber Jacobian
+	// Huber Derivative
 	const Scalar e = squaredNorm(error) * omegas[iE];
-	const Scalar rho1 = huberJacobian(e, HUBER_DELTA);
+	const Scalar rho1 = robustKernel.derivative(e);
 	const Scalar omega = omegas[iE] * rho1;
 
 	// compute Jacobians
@@ -1021,13 +1076,30 @@ Scalar computeActiveErrors_(const GpuVec4d& qs, const GpuVec3d& ts, const GpuVec
 	const int nedges = measurements.ssize();
 	const int block = BLOCK_ACTIVE_ERRORS;
 	const int grid = 16;
+	const auto robustKernelType = ROBUST_KERNEL_TUKEY;
 
 	if (nedges <= 0)
 		return 0;
 
 	CUDA_CHECK(cudaMemset(chi, 0, sizeof(Scalar)));
-	computeActiveErrorsKernel<M><<<grid, block>>>(nedges, qs, ts, Xws, measurements, omegas,
-		edge2PL, errors, Xcs, chi);
+	if(robustKernelType == ROBUST_KERNEL_NONE)
+	{
+		RobustKernelNone robustKernelNone;
+		computeActiveErrorsKernel<M><<<grid, block>>>(nedges, qs, ts, Xws, measurements, omegas,
+			edge2PL, errors, Xcs, chi, robustKernelNone);
+	}
+	else if(robustKernelType == ROBUST_KERNEL_HUBER)
+	{
+		RobustKernelHuber robustKernelHuber;
+		computeActiveErrorsKernel<M><<<grid, block>>>(nedges, qs, ts, Xws, measurements, omegas,
+			edge2PL, errors, Xcs, chi, robustKernelHuber);
+	}
+	else if(robustKernelType == ROBUST_KERNEL_TUKEY)
+	{
+		RobustKernelTukey robustKernelTukey;
+		computeActiveErrorsKernel<M><<<grid, block>>>(nedges, qs, ts, Xws, measurements, omegas,
+			edge2PL, errors, Xcs, chi, robustKernelTukey);
+	}
 	CUDA_CHECK(cudaGetLastError());
 
 	Scalar h_chi = 0;
@@ -1059,11 +1131,28 @@ void constructQuadraticForm_(const GpuVec3d& Xcs, const GpuVec4d& qs, const GpuV
 	const int block = 512;
 	const int grid = divUp(nedges, block);
 
+	const auto robustKernelType = ROBUST_KERNEL_TUKEY;
 	if (nedges <= 0)
 		return;
 
-	constructQuadraticFormKernel<M><<<grid, block>>>(nedges, Xcs, qs, errors, omegas, edge2PL,
-		edge2Hpl, flags, Hpp, bp, Hll, bl, Hpl);
+	if(robustKernelType == ROBUST_KERNEL_NONE)
+	{
+		RobustKernelNone robustKernelNone;
+		constructQuadraticFormKernel<M><<<grid, block>>>(nedges, Xcs, qs, errors, omegas, edge2PL,
+			edge2Hpl, flags, Hpp, bp, Hll, bl, Hpl, robustKernelNone);
+	}
+	else if(robustKernelType == ROBUST_KERNEL_HUBER)
+	{
+		RobustKernelHuber robustKernelHuber;
+		constructQuadraticFormKernel<M><<<grid, block>>>(nedges, Xcs, qs, errors, omegas, edge2PL,
+			edge2Hpl, flags, Hpp, bp, Hll, bl, Hpl, robustKernelHuber);
+	}
+	else if(robustKernelType == ROBUST_KERNEL_TUKEY)
+	{
+		RobustKernelTukey robustKernelTukey;
+		constructQuadraticFormKernel<M><<<grid, block>>>(nedges, Xcs, qs, errors, omegas, edge2PL,
+			edge2Hpl, flags, Hpp, bp, Hll, bl, Hpl, robustKernelTukey);
+		}
 	CUDA_CHECK(cudaGetLastError());
 }
 
