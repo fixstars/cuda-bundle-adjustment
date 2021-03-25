@@ -118,7 +118,7 @@ public:
 
 	/** @brief Set robust kernel
 	*/
-	virtual void setRobustKernel(RobustKernelType type) = 0;
+	virtual void setRobustKernel(RobustKernelType type, const double delta = 1) = 0;
 
 	/** @brief the destructor.
 	*/
