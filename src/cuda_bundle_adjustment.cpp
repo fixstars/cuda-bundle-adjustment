@@ -93,7 +93,7 @@ public:
 	}
 
 	void initialize(const VertexMapP& vertexMapP, const VertexMapL& vertexMapL,
-		const EdgeSet2D& edgeSet2D, const EdgeSet3D& edgeSet3D, const CameraParams& camera, const RobustKernelType type, const double delta)
+		const EdgeSet2D& edgeSet2D, const EdgeSet3D& edgeSet3D, const CameraParams& camera, const RobustKernelType type, const Scalar delta)
 	{
 		const auto t0 = get_time_point();
 
@@ -592,7 +592,7 @@ private:
 	////////////////////////////////////////////////////////////////////////////////////
 
 	RobustKernelType robustKernelType_;
-	double delta_;
+	Scalar delta_;
 };
 
 /** @brief Implementation of CudaBundleAdjustment.
@@ -803,7 +803,7 @@ public:
 	void setRobustKernel(const RobustKernelType type, const double delta = 1) override
 	{
 		robustKernelType_ = type;
-		delta_ = delta;
+		delta_ = ScalarCast(delta);
 	}
 
 
@@ -827,7 +827,7 @@ private:
 	BatchStatistics stats_;
 	TimeProfile timeProfile_;
 	RobustKernelType robustKernelType_;
-	double delta_;
+	Scalar delta_;
 };
 
 CudaBundleAdjustment::Ptr CudaBundleAdjustment::create()
