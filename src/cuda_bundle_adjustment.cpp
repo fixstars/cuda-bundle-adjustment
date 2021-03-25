@@ -93,7 +93,7 @@ public:
 	}
 
 	void initialize(const VertexMapP& vertexMapP, const VertexMapL& vertexMapL,
-		const EdgeSet2D& edgeSet2D, const EdgeSet3D& edgeSet3D, const CameraParams& camera, const RobustKernelType type)
+		const EdgeSet2D& edgeSet2D, const EdgeSet3D& edgeSet3D, const CameraParams& camera, const RobustKernelType type, const double delta)
 	{
 		const auto t0 = get_time_point();
 
@@ -232,6 +232,7 @@ public:
 		profItems_[PROF_ITEM_INITIALIZE] += get_duration(t0, t1);
 
 		robustKernelType_ = type;
+		delta_ = delta;
 	}
 
 	void buildStructure()
@@ -327,10 +328,10 @@ public:
 		const auto t0 = get_time_point();
 
 		const Scalar chi2D = gpu::computeActiveErrors(d_qs_, d_ts_, d_Xws_, d_measurements2D_,
-			d_omegas2D_, d_edge2PL2D_, d_errors2D_, d_Xcs2D_, d_chi_, robustKernelType_);
+			d_omegas2D_, d_edge2PL2D_, d_errors2D_, d_Xcs2D_, d_chi_, robustKernelType_, delta_);
 
 		const Scalar chi3D = gpu::computeActiveErrors(d_qs_, d_ts_, d_Xws_, d_measurements3D_,
-			d_omegas3D_, d_edge2PL3D_, d_errors3D_, d_Xcs3D_, d_chi_, robustKernelType_);
+			d_omegas3D_, d_edge2PL3D_, d_errors3D_, d_Xcs3D_, d_chi_, robustKernelType_, delta_);
 
 		const auto t1 = get_time_point();
 		profItems_[PROF_ITEM_COMPUTE_ERROR] += get_duration(t0, t1);
@@ -357,10 +358,10 @@ public:
 		d_bl_.fillZero();
 
 		gpu::constructQuadraticForm(d_Xcs2D_, d_qs_, d_errors2D_, d_omegas2D_, d_edge2PL2D_,
-			d_edge2Hpl2D_, d_edgeFlags2D_, d_Hpp_, d_bp_, d_Hll_, d_bl_, d_Hpl_, robustKernelType_);
+			d_edge2Hpl2D_, d_edgeFlags2D_, d_Hpp_, d_bp_, d_Hll_, d_bl_, d_Hpl_, robustKernelType_, delta_);
 
 		gpu::constructQuadraticForm(d_Xcs3D_, d_qs_, d_errors3D_, d_omegas3D_, d_edge2PL3D_,
-			d_edge2Hpl3D_, d_edgeFlags3D_, d_Hpp_, d_bp_, d_Hll_, d_bl_, d_Hpl_, robustKernelType_);
+			d_edge2Hpl3D_, d_edgeFlags3D_, d_Hpp_, d_bp_, d_Hll_, d_bl_, d_Hpl_, robustKernelType_, delta_);
 
 		const auto t1 = get_time_point();
 		profItems_[PROF_ITEM_BUILD_SYSTEM] += get_duration(t0, t1);
@@ -591,6 +592,7 @@ private:
 	////////////////////////////////////////////////////////////////////////////////////
 
 	RobustKernelType robustKernelType_;
+	double delta_;
 };
 
 /** @brief Implementation of CudaBundleAdjustment.
@@ -709,7 +711,7 @@ public:
 
 	void initialize() override
 	{
-		solver_.initialize(vertexMapP_, vertexMapL_, edges2D_, edges3D_, camera_, robustKernelType_);
+		solver_.initialize(vertexMapP_, vertexMapL_, edges2D_, edges3D_, camera_, robustKernelType_, delta_);
 
 		stats_.clear();
 	}
@@ -798,9 +800,10 @@ public:
 	{
 		return timeProfile_;
 	}
-	void setRobustKernel(RobustKernelType type) override
+	void setRobustKernel(const RobustKernelType type, const double delta = 1) override
 	{
 		robustKernelType_ = type;
+		delta_ = delta;
 	}
 
 
@@ -824,6 +827,7 @@ private:
 	BatchStatistics stats_;
 	TimeProfile timeProfile_;
 	RobustKernelType robustKernelType_;
+	double delta_;
 };
 
 CudaBundleAdjustment::Ptr CudaBundleAdjustment::create()
