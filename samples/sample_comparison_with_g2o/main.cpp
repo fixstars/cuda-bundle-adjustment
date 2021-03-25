@@ -47,7 +47,6 @@ static g2o::RobustKernel* createRobustKernel(cuba::RobustKernelType robustKernel
     rk->setDelta(thHuber2D);
     return rk;
   }
-  //ptrをどうする？
   else if (robustKernelType == cuba::ROBUST_KERNEL_TUKEY)
   {
     const double thTukey2D = 1;
