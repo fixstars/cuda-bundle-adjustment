@@ -33,8 +33,32 @@ limitations under the License.
 using OptimizerCPU = g2o::SparseOptimizer;
 using OptimizerGPU = cuba::CudaBundleAdjustment;
 
+static cuba::RobustKernelType gRobustKernelType = cuba::ROBUST_KERNEL_NONE;
+static g2o::RobustKernel* createRobustKernel(cuba::RobustKernelType robustKernelType)
+{
+  if (robustKernelType == cuba::ROBUST_KERNEL_NONE)
+  {
+    return nullptr;
+  }
+  else if (robustKernelType == cuba::ROBUST_KERNEL_HUBER)
+  {
+    const double thHuber2D = 1;
+    g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
+    rk->setDelta(thHuber2D);
+    return rk;
+  }
+  else if (robustKernelType == cuba::ROBUST_KERNEL_TUKEY)
+  {
+    const double thTukey2D = 1;
+    g2o::RobustKernelTukey* rk = new g2o::RobustKernelTukey;
+    rk->setDelta(thTukey2D);
+    return rk;
+  }
+  else return nullptr;
+}
+
 static void readGraph(const std::string& filename, OptimizerCPU& optimizerCPU, OptimizerGPU& optimizerGPU,
-	std::vector<int>& poseIds, std::vector<int>& landmarkIds, bool bRobust=true);
+	std::vector<int>& poseIds, std::vector<int>& landmarkIds);
 
 // use memory manager for vertices and edges, since CudaBundleAdjustment doesn't delete those pointers
 static cuba::ObjectCreator obj;
@@ -152,7 +176,7 @@ static inline cuba::Array<T, N> getArray(const cv::FileNode& node)
 }
 
 static void readGraph(const std::string& filename, OptimizerCPU& optimizerCPU, OptimizerGPU& optimizerGPU,
-	std::vector<int>& poseIds, std::vector<int>& landmarkIds, bool bRobust)
+	std::vector<int>& poseIds, std::vector<int>& landmarkIds)
 {
 	cv::FileStorage fs(filename, cv::FileStorage::READ);
 	CV_Assert(fs.isOpened());
@@ -176,8 +200,6 @@ static void readGraph(const std::string& filename, OptimizerCPU& optimizerCPU, O
 
 	optimizerGPU.setCameraPrams(camera);
 
-	const float thHuber2D = std::sqrt(1);
-	const float thTukey2D = std::sqrt(1);
 
 	// read pose vertices
 	for (const auto& node : fs["pose_vertices"])
@@ -237,12 +259,11 @@ static void readGraph(const std::string& filename, OptimizerCPU& optimizerCPU, O
 		ecpu->setVertex(1, optimizerCPU.vertex(iP));
 		ecpu->setMeasurement(measurement);
 		ecpu->setInformation(information * Eigen::Matrix2d::Identity());
-		if(bRobust)
-		{
-			g2o::RobustKernelTukey* rk = new g2o::RobustKernelTukey;
-			ecpu->setRobustKernel(rk);
-			rk->setDelta(thTukey2D);
-		}
+
+		const auto rk = createRobustKernel(gRobustKernelType);
+		ecpu->setRobustKernel(rk);
+		optimizerGPU.setRobustKernel(gRobustKernelType);
+
 		ecpu->fx = camera.fx;
 		ecpu->fy = camera.fy;
 		ecpu->cx = camera.cx;
@@ -270,12 +291,12 @@ static void readGraph(const std::string& filename, OptimizerCPU& optimizerCPU, O
 		ecpu->setVertex(1, optimizerCPU.vertex(iP));
 		ecpu->setMeasurement(measurement);
 		ecpu->setInformation(information * Eigen::Matrix3d::Identity());
-		if(bRobust)
-		{
-			g2o::RobustKernelTukey* rk = new g2o::RobustKernelTukey;
-			ecpu->setRobustKernel(rk);
-			rk->setDelta(thTukey2D);
-		}
+
+		const auto rk = createRobustKernel(gRobustKernelType);
+		ecpu->setRobustKernel(rk);
+		optimizerGPU.setRobustKernel(gRobustKernelType);
+
+
 		ecpu->fx = camera.fx;
 		ecpu->fy = camera.fy;
 		ecpu->cx = camera.cx;

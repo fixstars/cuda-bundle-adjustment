@@ -25,6 +25,7 @@ limitations under the License.
 #include <thrust/sort.h>
 #include <thrust/gather.h>
 
+#include "cuda_bundle_adjustment_constants.h"
 namespace cuba
 {
 namespace gpu
@@ -266,12 +267,6 @@ __device__ inline Scalar norm(const Vecxd<N>& x) { return norm<N>(x.data); }
 ////////////////////////////////////////////////////////////////////////////////////
 // Robust kernel
 ////////////////////////////////////////////////////////////////////////////////////
-enum RobustKernelType
-{
-	ROBUST_KERNEL_NONE = 0,
-	ROBUST_KERNEL_HUBER = 1,
-	ROBUST_KERNEL_TUKEY = 2,
-};
 struct RobustKernelNone
 {
   __device__ inline Scalar robustify(const Scalar x) { return x; }
@@ -733,7 +728,7 @@ __global__ void constructQuadraticFormKernel(int nedges,
 	const Vec3d& Xc = Xcs[iE];
 	const Vecmd& error = errors[iE];
 
-	// Huber Derivative
+	// Robust kernel derivative
 	const Scalar e = squaredNorm(error) * omegas[iE];
 	const Scalar rho1 = robustKernel.derivative(e);
 	const Scalar omega = omegas[iE] * rho1;
@@ -1071,12 +1066,11 @@ void findHschureMulBlockIndices(const GpuHplBlockMat& Hpl, const GpuHscBlockMat&
 template <int M>
 Scalar computeActiveErrors_(const GpuVec4d& qs, const GpuVec3d& ts, const GpuVec3d& Xws,
 	const GpuVecxd<M>& measurements, const GpuVec1d& omegas, const GpuVec2i& edge2PL,
-	GpuVecxd<M>& errors, GpuVec3d& Xcs, Scalar* chi)
+	GpuVecxd<M>& errors, GpuVec3d& Xcs, Scalar* chi, const RobustKernelType robustKernelType)
 {
 	const int nedges = measurements.ssize();
 	const int block = BLOCK_ACTIVE_ERRORS;
 	const int grid = 16;
-	const auto robustKernelType = ROBUST_KERNEL_TUKEY;
 
 	if (nedges <= 0)
 		return 0;
@@ -1110,44 +1104,43 @@ Scalar computeActiveErrors_(const GpuVec4d& qs, const GpuVec3d& ts, const GpuVec
 
 Scalar computeActiveErrors(const GpuVec4d& qs, const GpuVec3d& ts, const GpuVec3d& Xws,
 	const GpuVec2d& measurements, const GpuVec1d& omegas, const GpuVec2i& edge2PL,
-	GpuVec2d& errors, GpuVec3d& Xcs, Scalar* chi)
+	GpuVec2d& errors, GpuVec3d& Xcs, Scalar* chi, const RobustKernelType type)
 {
-	return computeActiveErrors_(qs, ts, Xws, measurements, omegas, edge2PL, errors, Xcs, chi);
+	return computeActiveErrors_(qs, ts, Xws, measurements, omegas, edge2PL, errors, Xcs, chi, type);
 }
 
 Scalar computeActiveErrors(const GpuVec4d& qs, const GpuVec3d& ts, const GpuVec3d& Xws,
 	const GpuVec3d& measurements, const GpuVec1d& omegas, const GpuVec2i& edge2PL,
-	GpuVec3d& errors, GpuVec3d& Xcs, Scalar* chi)
+	GpuVec3d& errors, GpuVec3d& Xcs, Scalar* chi, const RobustKernelType type)
 {
-	return computeActiveErrors_(qs, ts, Xws, measurements, omegas, edge2PL, errors, Xcs, chi);
+	return computeActiveErrors_(qs, ts, Xws, measurements, omegas, edge2PL, errors, Xcs, chi, type);
 }
 
 template <int M>
 void constructQuadraticForm_(const GpuVec3d& Xcs, const GpuVec4d& qs, const GpuVecxd<M>& errors,
 	const GpuVec1d& omegas, const GpuVec2i& edge2PL, const GpuVec1i& edge2Hpl, const GpuVec1b& flags,
-	GpuPxPBlockVec& Hpp, GpuPx1BlockVec& bp, GpuLxLBlockVec& Hll, GpuLx1BlockVec& bl, GpuHplBlockMat& Hpl)
+	GpuPxPBlockVec& Hpp, GpuPx1BlockVec& bp, GpuLxLBlockVec& Hll, GpuLx1BlockVec& bl, GpuHplBlockMat& Hpl, const RobustKernelType type)
 {
 	const int nedges = errors.ssize();
 	const int block = 512;
 	const int grid = divUp(nedges, block);
 
-	const auto robustKernelType = ROBUST_KERNEL_TUKEY;
 	if (nedges <= 0)
 		return;
 
-	if(robustKernelType == ROBUST_KERNEL_NONE)
+	if(type == ROBUST_KERNEL_NONE)
 	{
 		RobustKernelNone robustKernelNone;
 		constructQuadraticFormKernel<M><<<grid, block>>>(nedges, Xcs, qs, errors, omegas, edge2PL,
 			edge2Hpl, flags, Hpp, bp, Hll, bl, Hpl, robustKernelNone);
 	}
-	else if(robustKernelType == ROBUST_KERNEL_HUBER)
+	else if(type == ROBUST_KERNEL_HUBER)
 	{
 		RobustKernelHuber robustKernelHuber;
 		constructQuadraticFormKernel<M><<<grid, block>>>(nedges, Xcs, qs, errors, omegas, edge2PL,
 			edge2Hpl, flags, Hpp, bp, Hll, bl, Hpl, robustKernelHuber);
 	}
-	else if(robustKernelType == ROBUST_KERNEL_TUKEY)
+	else if(type == ROBUST_KERNEL_TUKEY)
 	{
 		RobustKernelTukey robustKernelTukey;
 		constructQuadraticFormKernel<M><<<grid, block>>>(nedges, Xcs, qs, errors, omegas, edge2PL,
@@ -1158,16 +1151,16 @@ void constructQuadraticForm_(const GpuVec3d& Xcs, const GpuVec4d& qs, const GpuV
 
 void constructQuadraticForm(const GpuVec3d& Xcs, const GpuVec4d& qs, const GpuVec2d& errors,
 	const GpuVec1d& omegas, const GpuVec2i& edge2PL, const GpuVec1i& edge2Hpl, const GpuVec1b& flags,
-	GpuPxPBlockVec& Hpp, GpuPx1BlockVec& bp, GpuLxLBlockVec& Hll, GpuLx1BlockVec& bl, GpuHplBlockMat& Hpl)
+	GpuPxPBlockVec& Hpp, GpuPx1BlockVec& bp, GpuLxLBlockVec& Hll, GpuLx1BlockVec& bl, GpuHplBlockMat& Hpl, const RobustKernelType type)
 {
-	constructQuadraticForm_(Xcs, qs, errors, omegas, edge2PL, edge2Hpl, flags, Hpp, bp, Hll, bl, Hpl);
+	constructQuadraticForm_(Xcs, qs, errors, omegas, edge2PL, edge2Hpl, flags, Hpp, bp, Hll, bl, Hpl, type);
 }
 
 void constructQuadraticForm(const GpuVec3d& Xcs, const GpuVec4d& qs, const GpuVec3d& errors,
 	const GpuVec1d& omegas, const GpuVec2i& edge2PL, const GpuVec1i& edge2Hpl, const GpuVec1b& flags,
-	GpuPxPBlockVec& Hpp, GpuPx1BlockVec& bp, GpuLxLBlockVec& Hll, GpuLx1BlockVec& bl, GpuHplBlockMat& Hpl)
+	GpuPxPBlockVec& Hpp, GpuPx1BlockVec& bp, GpuLxLBlockVec& Hll, GpuLx1BlockVec& bl, GpuHplBlockMat& Hpl, const RobustKernelType type)
 {
-	constructQuadraticForm_(Xcs, qs, errors, omegas, edge2PL, edge2Hpl, flags, Hpp, bp, Hll, bl, Hpl);
+	constructQuadraticForm_(Xcs, qs, errors, omegas, edge2PL, edge2Hpl, flags, Hpp, bp, Hll, bl, Hpl, type);
 }
 
 template <typename T, int DIM>
