@@ -33,25 +33,23 @@ limitations under the License.
 using OptimizerCPU = g2o::SparseOptimizer;
 using OptimizerGPU = cuba::CudaBundleAdjustment;
 
-static cuba::RobustKernelType gRobustKernelType = cuba::ROBUST_KERNEL_NONE;
-static g2o::RobustKernel* createRobustKernel(cuba::RobustKernelType robustKernelType)
+static cuba::RobustKernelType gRobustKernelType = cuba::ROBUST_KERNEL_HUBER;
+static g2o::RobustKernel* createRobustKernel(const cuba::RobustKernelType type, const double delta = 1.0)
 {
-  if (robustKernelType == cuba::ROBUST_KERNEL_NONE)
+  if (type == cuba::ROBUST_KERNEL_NONE)
   {
     return nullptr;
   }
-  else if (robustKernelType == cuba::ROBUST_KERNEL_HUBER)
+  else if (type == cuba::ROBUST_KERNEL_HUBER)
   {
-    const double thHuber2D = 1;
     g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
-    rk->setDelta(thHuber2D);
+    rk->setDelta(delta);
     return rk;
   }
-  else if (robustKernelType == cuba::ROBUST_KERNEL_TUKEY)
+  else if (type == cuba::ROBUST_KERNEL_TUKEY)
   {
-    const double thTukey2D = 1;
     g2o::RobustKernelTukey* rk = new g2o::RobustKernelTukey;
-    rk->setDelta(thTukey2D);
+    rk->setDelta(delta);
     return rk;
   }
   else return nullptr;
@@ -200,6 +198,7 @@ static void readGraph(const std::string& filename, OptimizerCPU& optimizerCPU, O
 
 	optimizerGPU.setCameraPrams(camera);
 
+	const double thRobust = 2.0;
 
 	// read pose vertices
 	for (const auto& node : fs["pose_vertices"])
@@ -244,7 +243,6 @@ static void readGraph(const std::string& filename, OptimizerCPU& optimizerCPU, O
 
 		landmarkIds.push_back(id);
 	}
-
 	// read monocular edges
 	for (const auto& node : fs["monocular_edges"])
 	{
@@ -260,9 +258,9 @@ static void readGraph(const std::string& filename, OptimizerCPU& optimizerCPU, O
 		ecpu->setMeasurement(measurement);
 		ecpu->setInformation(information * Eigen::Matrix2d::Identity());
 
-		const auto rk = createRobustKernel(gRobustKernelType);
+		const auto rk = createRobustKernel(gRobustKernelType, thRobust);
 		ecpu->setRobustKernel(rk);
-		optimizerGPU.setRobustKernel(gRobustKernelType);
+		optimizerGPU.setRobustKernel(gRobustKernelType, thRobust);
 
 		ecpu->fx = camera.fx;
 		ecpu->fy = camera.fy;
@@ -292,9 +290,9 @@ static void readGraph(const std::string& filename, OptimizerCPU& optimizerCPU, O
 		ecpu->setMeasurement(measurement);
 		ecpu->setInformation(information * Eigen::Matrix3d::Identity());
 
-		const auto rk = createRobustKernel(gRobustKernelType);
+		const auto rk = createRobustKernel(gRobustKernelType, thRobust);
 		ecpu->setRobustKernel(rk);
-		optimizerGPU.setRobustKernel(gRobustKernelType);
+		optimizerGPU.setRobustKernel(gRobustKernelType, thRobust);
 
 
 		ecpu->fx = camera.fx;
