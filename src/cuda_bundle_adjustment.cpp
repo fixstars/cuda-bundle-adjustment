@@ -598,7 +598,10 @@ private:
 class CudaBundleAdjustmentImpl : public CudaBundleAdjustment
 {
 public:
-
+	CudaBundleAdjustmentImpl()
+	{
+		robustKernelType_ = cuba::ROBUST_KERNEL_NONE;
+	}
 	void addPoseVertex(VertexP* v) override
 	{
 		vertexMapP_.insert({ v->id, v });
