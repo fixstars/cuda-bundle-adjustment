@@ -93,7 +93,7 @@ public:
 	}
 
 	void initialize(const VertexMapP& vertexMapP, const VertexMapL& vertexMapL,
-		const EdgeSet2D& edgeSet2D, const EdgeSet3D& edgeSet3D, const CameraParams& camera, const RobustKernelType& robustKernelType)
+		const EdgeSet2D& edgeSet2D, const EdgeSet3D& edgeSet3D, const CameraParams& camera, const RobustKernelType type)
 	{
 		const auto t0 = get_time_point();
 
@@ -231,7 +231,7 @@ public:
 		const auto t1 = get_time_point();
 		profItems_[PROF_ITEM_INITIALIZE] += get_duration(t0, t1);
 
-		robustKernelType_ = robustKernelType;
+		robustKernelType_ = type;
 	}
 
 	void buildStructure()
