@@ -506,12 +506,12 @@ private:
 	std::vector<BaseEdge*> baseEdges_;
 	int numP_, numL_, nedges2D_, nedges3D_;
 
-	// edge information
+	// solution vectors
 	std::vector<Vec4d> qs_;
 	std::vector<Vec3d> ts_;
 	std::vector<Vec3d> Xws_;
 
-	// solution vectors
+	// edge information
 	std::vector<Vec2d> measurements2D_;
 	std::vector<Vec3d> measurements3D_;
 	std::vector<Scalar> omegas_;
