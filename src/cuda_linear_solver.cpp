@@ -388,8 +388,6 @@ public:
 		const int size = Hsc.rows();
 		const int nnz = Hsc.nnzSymm();
 
-		A_.resize(size, size);
-		A_.resizeNonZeros(nnz);
 		cholesky_.resize(size);
 
 		// set permutation
@@ -418,7 +416,6 @@ public:
 
 private:
 
-	SparseMatrixCSR A_;
 	std::vector<int> P_;
 	Cholesky cholesky_;
 };
