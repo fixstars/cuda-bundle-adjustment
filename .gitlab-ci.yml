@@ -13,7 +13,7 @@ stages:
     - docker
   script:
     - ldconfig
-    - cmake . -DENABLE_SAMPLES=ON -DWITH_G2O=${with_g2o} -DUSE_FLOAT32=${use_float32}
+    - cmake . -DENABLE_SAMPLES=ON -DWITH_G2O=${with_g2o} -DUSE_FLOAT32=${use_float32} -DCMAKE_MODULE_PATH=/usr/local
     - make
 
 build:sample_with_g2o:
