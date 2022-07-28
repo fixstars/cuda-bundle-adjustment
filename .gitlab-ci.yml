@@ -1,0 +1,29 @@
+image: adaskit/cuba:0.1
+
+variables:
+  GIT_SUBMODULE_STRATEGY: recursive
+
+stages:
+  - build
+  #- test
+
+.build_template: &build_definition
+  stage: build
+  tags:
+    - docker
+  script:
+    - ldconfig
+    - cmake . -DENABLE_SAMPLES=ON -DWITH_G2O=${with_g2o} -DUSE_FLOAT32=${use_float32}
+    - make
+
+build:sample_with_g2o:
+  variables:
+    with_g2o: "ON"
+    use_float32: "OFF"
+  <<: *build_definition
+
+build:use_float32:
+  variables:
+    with_g2o: "OFF"
+    use_float32: "ON"
+  <<: *build_definition
