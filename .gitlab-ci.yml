@@ -5,7 +5,7 @@ variables:
 
 stages:
   - build
-  #- test
+  - test
 
 .build_template: &build_definition
   stage: build
@@ -20,6 +20,11 @@ build:sample_with_g2o:
   variables:
     with_g2o: "ON"
     use_float32: "OFF"
+  artifacts:
+    paths:
+      - ./samples/sample_ba_from_file/sample_ba_from_file
+      - ./samples/sample_comparison_with_g2o/sample_comparison_with_g2o
+    expire_in: 1d
   <<: *build_definition
 
 build:use_float32:
@@ -27,3 +32,25 @@ build:use_float32:
     with_g2o: "OFF"
     use_float32: "ON"
   <<: *build_definition
+
+test:sample_with_g2o:
+  stage: test
+  tags:
+    - nvidia-docker
+  script:
+    - ldconfig
+    - 7za x samples/ba_input.7z 
+    - ./samples/sample_comparison_with_g2o/sample_comparison_with_g2o ./ba_input/ba_kitti_00.json
+  dependencies:
+    - build:sample_with_g2o
+
+test:cuda-memcheck:
+  stage: test
+  tags:
+    - nvidia-docker
+  script:
+    - ldconfig
+    - 7za x samples/ba_input.7z 
+    - cuda-memcheck --leak-check full ./samples/sample_ba_from_file/sample_ba_from_file ./ba_input/ba_kitti_07.json
+  dependencies:
+    - build:sample_with_g2o
