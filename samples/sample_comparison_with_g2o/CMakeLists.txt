@@ -31,6 +31,7 @@ include_directories(${EIGEN3_INCLUDE_DIR})
 find_package(g2o REQUIRED)
 include_directories(${G2O_INCLUDE_DIR})
 include_directories(${G2O_INCLUDE_DIR}/g2o/EXTERNAL/csparse)
+add_definitions(-DG2O_USE_VENDORED_CERES)
 
 file(GLOB srcs ./*.cpp ./*.h* ${SAMPLE_UTILITY_DIR}/*.cpp ${SAMPLE_UTILITY_DIR}/*.h*)
 add_executable(sample_comparison_with_g2o ${srcs})
