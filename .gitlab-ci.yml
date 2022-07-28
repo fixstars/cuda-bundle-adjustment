@@ -39,6 +39,6 @@ test:sample_with_g2o:
   script:
     - ldconfig
     - 7za x samples/ba_input.7z 
-    - ./samples/sample_comparison_with_g2o/sample_comparison_with_g2o samples/ba_input/ba_kitti_00.json
+    - ./samples/sample_comparison_with_g2o/sample_comparison_with_g2o ./ba_input/ba_kitti_00.json
   dependencies:
     - build:sample_with_g2o
