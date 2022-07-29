@@ -114,6 +114,11 @@ public:
 	*/
 	virtual const TimeProfile& timeProfile() = 0;
 
+	/** @brief Returns the Chi-squared of the edge.
+	@note Returns 0 if the edge is inactive (pose and landmark are both fixed).
+	*/
+	virtual double chiSquared(const BaseEdge* e) const = 0;
+
 	/** @brief the destructor.
 	*/
 	virtual ~CudaBundleAdjustment();
