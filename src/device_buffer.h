@@ -30,7 +30,7 @@ class DeviceBuffer
 public:
 
 	DeviceBuffer() : data_(nullptr), size_(0), capacity_(0), allocated_(false) {}
-	DeviceBuffer(size_t size) : data_(nullptr), size_(0), capacity_(0), allocated_(false) { allocate(size); }
+	DeviceBuffer(size_t size) : data_(nullptr), size_(0), capacity_(0), allocated_(false) { resize(size); }
 	~DeviceBuffer() { destroy(); }
 
 	void allocate(size_t count)

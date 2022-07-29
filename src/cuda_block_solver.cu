@@ -591,6 +591,11 @@ __device__ inline void normalizeQuaternion(const Vec4d& a, Vec4d& b)
 		b[i] = invn * a[i];
 }
 
+__device__ inline Scalar pow3(Scalar x)
+{
+	return x * x * x;
+}
+
 __device__ inline void updateExp(const Scalar* update, Vec4d& q, Vec3d& t)
 {
 	Vec3d omega(update);
@@ -612,7 +617,7 @@ __device__ inline void updateExp(const Scalar* update, Vec4d& q, Vec3d& t)
 	{
 		const Scalar a1 = sin(theta) / theta;
 		const Scalar a2 = (1 - cos(theta)) / (theta * theta);
-		const Scalar a3 = (theta - sin(theta)) / (pow(theta, 3));
+		const Scalar a3 = (theta - sin(theta)) / pow3(theta);
 		addOmega(a1, O1, a2, O2, R);
 		addOmega(a2, O1, a3, O2, V);
 	}

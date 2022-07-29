@@ -1,0 +1,56 @@
+image: adaskit/cuba:0.1
+
+variables:
+  GIT_SUBMODULE_STRATEGY: recursive
+
+stages:
+  - build
+  - test
+
+.build_template: &build_definition
+  stage: build
+  tags:
+    - docker
+  script:
+    - ldconfig
+    - cmake . -DENABLE_SAMPLES=ON -DWITH_G2O=${with_g2o} -DUSE_FLOAT32=${use_float32} -DCMAKE_MODULE_PATH=/usr/local
+    - make
+
+build:sample_with_g2o:
+  variables:
+    with_g2o: "ON"
+    use_float32: "OFF"
+  artifacts:
+    paths:
+      - ./samples/sample_ba_from_file/sample_ba_from_file
+      - ./samples/sample_comparison_with_g2o/sample_comparison_with_g2o
+    expire_in: 1d
+  <<: *build_definition
+
+build:use_float32:
+  variables:
+    with_g2o: "OFF"
+    use_float32: "ON"
+  <<: *build_definition
+
+test:sample_with_g2o:
+  stage: test
+  tags:
+    - nvidia-docker
+  script:
+    - ldconfig
+    - 7za x samples/ba_input.7z 
+    - ./samples/sample_comparison_with_g2o/sample_comparison_with_g2o ./ba_input/ba_kitti_00.json
+  dependencies:
+    - build:sample_with_g2o
+
+test:cuda-memcheck:
+  stage: test
+  tags:
+    - nvidia-docker
+  script:
+    - ldconfig
+    - 7za x samples/ba_input.7z 
+    - cuda-memcheck --leak-check full ./samples/sample_ba_from_file/sample_ba_from_file ./ba_input/ba_kitti_07.json
+  dependencies:
+    - build:sample_with_g2o
