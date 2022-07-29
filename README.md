@@ -41,8 +41,7 @@ ba_kitti_00.json|1332|133383|561116|11.9|1.23
 Some features supported in g2o are currently simplified or not implemented.
 
 - Information matrix is represented by a scalar
-- Camera parameters are the same in all edges (assumes observations are done by a single camera)
-- Robust kernel is not implemented
+- Camera parameters are associated with each of the pose vertices (not each of the edges)
 - Level optimization is not implemented
 
 ## Requirement
