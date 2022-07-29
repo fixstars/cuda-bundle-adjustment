@@ -864,7 +864,7 @@ public:
 		return stats_;
 	}
 
-	const TimeProfile& timeProfile() override
+	const TimeProfile& timeProfile() const override
 	{
 		return timeProfile_;
 	}
