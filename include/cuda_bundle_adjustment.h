@@ -94,6 +94,10 @@ public:
 	*/
 	virtual size_t nedges() const = 0;
 
+	/** @brief Sets robust kernels to specified edges.
+	*/
+	virtual void setRobustKernels(RobustKernelType kernelType, double delta, EdgeType edgeType) = 0;
+
 	/** @brief Initializes the graph.
 	*/
 	virtual void initialize() = 0;

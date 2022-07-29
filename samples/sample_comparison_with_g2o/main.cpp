@@ -26,6 +26,7 @@ limitations under the License.
 #include <g2o/core/optimization_algorithm_levenberg.h>
 #include <g2o/solvers/eigen/linear_solver_eigen.h>
 #include <g2o/types/sba/types_six_dof_expmap.h>
+#include <g2o/core/robust_kernel_impl.h>
 
 #include <cuda_bundle_adjustment.h>
 #include <object_creator.h>
@@ -151,6 +152,23 @@ static inline cuba::Array<T, N> getArray(const cv::FileNode& node)
 	return arr;
 }
 
+static g2o::RobustKernel* createRobustKernel(cuba::RobustKernelType type, double delta = 1)
+{
+	if (type == cuba::RobustKernelType::HUBER)
+	{
+		auto kernel = new g2o::RobustKernelHuber();
+		kernel->setDelta(delta);
+		return kernel;
+	}
+	if (type == cuba::RobustKernelType::TUKEY)
+	{
+		auto kernel = new g2o::RobustKernelTukey();
+		kernel->setDelta(delta);
+		return kernel;
+	}
+	return nullptr;
+};
+
 static void readGraph(const std::string& filename, OptimizerCPU& optimizerCPU, OptimizerGPU& optimizerGPU,
 	std::vector<int>& poseIds, std::vector<int>& landmarkIds)
 {
@@ -175,6 +193,13 @@ static void readGraph(const std::string& filename, OptimizerCPU& optimizerCPU, O
 	camera.bf = fs["bf"];
 
 	optimizerGPU.setCameraPrams(camera);
+
+	const cuba::RobustKernelType robustKernelType = cuba::RobustKernelType::HUBER;
+	const double deltaMono = sqrt(5.991);
+	const double deltaStereo = sqrt(7.815);
+
+	optimizerGPU.setRobustKernels(robustKernelType, deltaMono, cuba::EdgeType::MONOCULAR);
+	optimizerGPU.setRobustKernels(robustKernelType, deltaStereo, cuba::EdgeType::STEREO);
 
 	// read pose vertices
 	for (const auto& node : fs["pose_vertices"])
@@ -238,6 +263,7 @@ static void readGraph(const std::string& filename, OptimizerCPU& optimizerCPU, O
 		ecpu->fy = camera.fy;
 		ecpu->cx = camera.cx;
 		ecpu->cy = camera.cy;
+		ecpu->setRobustKernel(createRobustKernel(robustKernelType, deltaMono));
 		optimizerCPU.addEdge(ecpu);
 
 		// add monocular edge to GPU optimizer
@@ -266,6 +292,7 @@ static void readGraph(const std::string& filename, OptimizerCPU& optimizerCPU, O
 		ecpu->cx = camera.cx;
 		ecpu->cy = camera.cy;
 		ecpu->bf = camera.bf;
+		ecpu->setRobustKernel(createRobustKernel(robustKernelType, deltaStereo));
 		optimizerCPU.addEdge(ecpu);
 
 		// add stereo edge to GPU optimizer
