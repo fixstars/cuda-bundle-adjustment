@@ -184,6 +184,20 @@ using GpuPxLBlockVec = DeviceBlockVector<Scalar, PDIM, LDIM>;
 using GpuPx1BlockVec = DeviceBlockVector<Scalar, PDIM, 1>;
 using GpuLx1BlockVec = DeviceBlockVector<Scalar, LDIM, 1>;
 
+class GpuVecAny
+{
+public:
+
+	GpuVecAny() : ptr_(nullptr) {}
+	template <typename T> GpuVecAny(const GpuVec<T>& vec) : ptr_((void*)&vec) {}
+	template <typename T> GpuVec<T>& getRef() const { return *((GpuVec<T>*)ptr_); }
+	template <typename T> const GpuVec<T>& getCRef() const { return *((GpuVec<T>*)ptr_); }
+
+private:
+
+	void* ptr_;
+};
+
 } // namespace cuba
 
 #endif // !__DEVICE_MATRIX_H__
