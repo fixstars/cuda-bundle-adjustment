@@ -534,6 +534,23 @@ public:
 			prof[profileItemString[i]] = profItems_[i];
 	}
 
+	void getChiSqs(std::unordered_map<const BaseEdge*, double>& chiSqs)
+	{
+		chiSqs.clear();
+
+		chiSqs_.resize(baseEdges_.size());
+
+		// compute errors
+		/*gpu::computeChiSquares(d_qs_, d_ts_, d_cameras_, d_Xws_, d_measurements2D_,
+			d_omegas2D_, d_edge2PL2D_, d_chiSqs2D_);
+		gpu::computeChiSquares(d_qs_, d_ts_, d_cameras_, d_Xws_, d_measurements3D_,
+			d_omegas3D_, d_edge2PL3D_, d_chiSqs3D_);
+		d_chiSqs_.download(chiSqs_.data());*/
+
+		for (size_t i = 0; i < chiSqs_.size(); i++)
+			chiSqs[baseEdges_[i]] = chiSqs_[i];
+	}
+
 private:
 
 	static inline uint8_t makeEdgeFlag(bool fixedP, bool fixedL)
@@ -566,6 +583,7 @@ private:
 	std::vector<Scalar> omegas_;
 	std::vector<PLIndex> edge2PL_;
 	std::vector<uint8_t> edgeFlags_;
+	std::vector<Scalar> chiSqs_;
 
 	// block matrices
 	HplSparseBlockMatrix Hpl_;
