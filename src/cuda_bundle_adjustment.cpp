@@ -865,8 +865,6 @@ private:
 
 	BatchStatistics stats_;
 	TimeProfile timeProfile_;
-	RobustKernelType robustKernelType_;
-	Scalar delta_;
 };
 
 CudaBundleAdjustment::Ptr CudaBundleAdjustment::create()
