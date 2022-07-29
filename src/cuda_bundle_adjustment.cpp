@@ -340,6 +340,10 @@ public:
 		d_edgeFlags3D_.assign(nedges3D_, edgeFlags_.data() + nedges2D_);
 		d_chi_.resize(1);
 
+		d_chiSqs_.resize(baseEdges_.size());
+		d_chiSqs2D_.map(nedges2D_, d_chiSqs_.data());
+		d_chiSqs3D_.map(nedges3D_, d_chiSqs_.data() + nedges2D_);
+
 		// upload camera parameters to device memory
 		d_cameras_.assign(cameras_.size(), cameras_.data());
 
@@ -515,6 +519,23 @@ public:
 			Xws_[i].copyTo(verticesL_[i]->Xw.data());
 	}
 
+	void getChiSqs(std::unordered_map<const BaseEdge*, double>& chiSqs)
+	{
+		chiSqs.clear();
+
+		chiSqs_.resize(baseEdges_.size());
+
+		// compute chi-squares
+		gpu::computeChiSquares(d_qs_, d_ts_, d_cameras_, d_Xws_, d_measurements2D_,
+			d_omegas2D_, d_edge2PL2D_, d_chiSqs2D_);
+		gpu::computeChiSquares(d_qs_, d_ts_, d_cameras_, d_Xws_, d_measurements3D_,
+			d_omegas3D_, d_edge2PL3D_, d_chiSqs3D_);
+		d_chiSqs_.download(chiSqs_.data());
+
+		for (size_t i = 0; i < chiSqs_.size(); i++)
+			chiSqs[baseEdges_[i]] = chiSqs_[i];
+	}
+
 	void getTimeProfile(TimeProfile& prof) const
 	{
 		static const char* profileItemString[PROF_ITEM_NUM] =
@@ -566,6 +587,7 @@ private:
 	std::vector<Scalar> omegas_;
 	std::vector<PLIndex> edge2PL_;
 	std::vector<uint8_t> edgeFlags_;
+	std::vector<Scalar> chiSqs_;
 
 	// block matrices
 	HplSparseBlockMatrix Hpl_;
@@ -597,6 +619,7 @@ private:
 	GpuVec2i d_edge2PL2D_, d_edge2PL3D_;
 	GpuVec1b d_edgeFlags2D_, d_edgeFlags3D_;
 	GpuVec1i d_edge2Hpl_, d_edge2Hpl2D_, d_edge2Hpl3D_;
+	GpuVec1d d_chiSqs_, d_chiSqs2D_, d_chiSqs3D_;
 
 	// solution increments Δx = [Δxp Δxl]
 	GpuVec1d d_x_;
@@ -823,7 +846,7 @@ public:
 		}
 
 		solver_.finalize();
-
+		solver_.getChiSqs(chiSqs_);
 		solver_.getTimeProfile(timeProfile_);
 	}
 
@@ -846,6 +869,11 @@ public:
 		return timeProfile_;
 	}
 
+	double chiSquared(const BaseEdge* e) const override
+	{
+		return chiSqs_.count(e) ? chiSqs_.at(e) : 0;
+	}
+
 	~CudaBundleAdjustmentImpl()
 	{
 		clear();
@@ -865,6 +893,7 @@ private:
 
 	BatchStatistics stats_;
 	TimeProfile timeProfile_;
+	std::unordered_map<const BaseEdge*, double> chiSqs_;
 };
 
 CudaBundleAdjustment::Ptr CudaBundleAdjustment::create()

@@ -838,6 +838,42 @@ __global__ void constructQuadraticFormKernel(int nedges, const Vec3d* Xcs, const
 	}
 }
 
+template <int MDIM>
+__global__ void computeChiSquaresKernel(int nedges, const Vec4d* qs, const Vec3d* ts, const Vec5d* cameras,
+	const Vec3d* Xws, const Vecxd<MDIM>* measurements, const Scalar* omegas, const Vec2i* edge2PL, Scalar* chiSqs)
+{
+	using Vecmd = Vecxd<MDIM>;
+
+	const int iE = blockIdx.x * blockDim.x + threadIdx.x;
+	if (iE >= nedges)
+		return;
+
+	const Vec2i index = edge2PL[iE];
+	const int iP = index[0];
+	const int iL = index[1];
+
+	const Vec4d& q = qs[iP];
+	const Vec3d& t = ts[iP];
+	const Vec5d& camera = cameras[iP];
+	const Vec3d& Xw = Xws[iL];
+	const Vecmd& measurement = measurements[iE];
+
+	// project world to camera
+	Vec3d Xc;
+	projectW2C(q, t, Xw, Xc);
+
+	// project camera to image
+	Vecmd proj;
+	projectC2I(Xc, proj, camera);
+
+	// compute residual
+	Vecmd error;
+	for (int i = 0; i < MDIM; i++)
+		error[i] = proj[i] - measurement[i];
+
+	chiSqs[iE] = omegas[iE] * squaredNorm(error);
+}
+
 template <int DIM>
 __global__ void maxDiagonalKernel(int size, const Scalar* D, Scalar* maxD)
 {
@@ -1257,6 +1293,37 @@ void constructQuadraticForm(const GpuVec3d& Xcs, const GpuVec4d& qs, const GpuVe
 {
 	auto func = constructQuadraticFormFuncs[3 + kernel.type];
 	func(Xcs, qs, cameras, errors, omegas, edge2PL, edge2Hpl, flags, kernel.delta, Hpp, bp, Hll, bl, Hpl);
+}
+
+template <int MDIM>
+void computeChiSquares_(const GpuVec4d& qs, const GpuVec3d& ts, const GpuVec5d& cameras, const GpuVec3d& Xws,
+	const GpuVecAny& _measurements, const GpuVec1d& omegas, const GpuVec2i& edge2PL, GpuVec1d& chiSqs)
+{
+	using Vecmd = Vecxd<MDIM>;
+
+	const GpuVec<Vecmd>& measurements = _measurements.getCRef<Vecmd>();
+
+	const int nedges = measurements.ssize();
+	const int block = 512;
+	const int grid = divUp(nedges, block);
+
+	if (nedges <= 0)
+		return;
+
+	computeChiSquaresKernel<MDIM><<<grid, block>>>(nedges, qs, ts, cameras, Xws, measurements, omegas, edge2PL, chiSqs);
+	CUDA_CHECK(cudaGetLastError());
+}
+
+void computeChiSquares(const GpuVec4d& qs, const GpuVec3d& ts, const GpuVec5d& cameras, const GpuVec3d& Xws,
+	const GpuVec2d& measurements, const GpuVec1d& omegas, const GpuVec2i& edge2PL, GpuVec1d& chiSqs)
+{
+	computeChiSquares_<2>(qs, ts, cameras, Xws, measurements, omegas, edge2PL, chiSqs);
+}
+
+void computeChiSquares(const GpuVec4d& qs, const GpuVec3d& ts, const GpuVec5d& cameras, const GpuVec3d& Xws,
+	const GpuVec3d& measurements, const GpuVec1d& omegas, const GpuVec2i& edge2PL, GpuVec1d& chiSqs)
+{
+	computeChiSquares_<3>(qs, ts, cameras, Xws, measurements, omegas, edge2PL, chiSqs);
 }
 
 template <typename T, int DIM>
