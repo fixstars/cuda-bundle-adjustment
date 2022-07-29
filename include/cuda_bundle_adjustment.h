@@ -77,11 +77,6 @@ public:
 	*/
 	virtual void removeEdge(BaseEdge* e) = 0;
 
-	/** @brief Sets a camera parameters to the graph.
-	@note The camera parameters are the same in all edges.
-	*/
-	virtual void setCameraPrams(const CameraParams& camera) = 0;
-
 	/** @brief Returns the number of poses in the graph.
 	*/
 	virtual size_t nposes() const = 0;

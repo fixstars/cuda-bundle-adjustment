@@ -43,6 +43,25 @@ template <class T>
 using UniquePtr = std::unique_ptr<T>;
 
 ////////////////////////////////////////////////////////////////////////////////////
+// Camera parameters
+////////////////////////////////////////////////////////////////////////////////////
+
+/** @brief Camera parameters struct.
+*/
+struct CameraParams
+{
+	double fx;               //!< focal length x (pixel)
+	double fy;               //!< focal length y (pixel)
+	double cx;               //!< principal point x (pixel)
+	double cy;               //!< principal point y (pixel)
+	double bf;               //!< stereo baseline times fx
+
+	/** @brief The constructor.
+	*/
+	CameraParams() : fx(0), fy(0), cx(0), cy(0), bf(0) {}
+};
+
+////////////////////////////////////////////////////////////////////////////////////
 // Edge
 ////////////////////////////////////////////////////////////////////////////////////
 
@@ -148,13 +167,15 @@ struct PoseVertex
 	@param id ID of the vertex.
 	@param q rotational component of the pose, represented by quaternions.
 	@param t translational component of the pose.
+	@param camera camera parameters of the view.
 	@param fixed if true, the state variables are fixed during optimization.
 	*/
-	PoseVertex(int id, const Rotation& q, const Translation& t, bool fixed = false)
-		: q(q), t(t), fixed(fixed), id(id), iP(-1) {}
+	PoseVertex(int id, const Rotation& q, const Translation& t, const CameraParams& camera, bool fixed = false)
+		: q(q), t(t), camera(camera), fixed(fixed), id(id), iP(-1) {}
 
 	Rotation q;              //!< rotational component of the pose, represented by quaternions.
 	Translation t;           //!< translational component of the pose.
+	CameraParams camera;     //!< camera parameters.
 	bool fixed;              //!< if true, the state variables are fixed during optimization.
 	int id;                  //!< ID of the vertex.
 	int iP;                  //!< ID of the vertex (internally used).
@@ -194,25 +215,6 @@ enum class RobustKernelType
 	NONE  = 0,
 	HUBER = 1,
 	TUKEY = 2,
-};
-
-////////////////////////////////////////////////////////////////////////////////////
-// Camera parameters
-////////////////////////////////////////////////////////////////////////////////////
-
-/** @brief Camera parameters struct.
-*/
-struct CameraParams
-{
-	double fx;               //!< focal length x (pixel)
-	double fy;               //!< focal length y (pixel)
-	double cx;               //!< principal point x (pixel)
-	double cy;               //!< principal point y (pixel)
-	double bf;               //!< stereo baseline times fx
-
-	/** @brief The constructor.
-	*/
-	CameraParams() : fx(0), fy(0), cx(0), cy(0), bf(0) {}
 };
 
 ////////////////////////////////////////////////////////////////////////////////////
