@@ -85,6 +85,10 @@ void updateLandmarks(const GpuLx1BlockVec& xl, GpuVec3d& Xws);
 
 void computeScale(const GpuVec1d& x, const GpuVec1d& b, Scalar* scale, Scalar lambda);
 
+void solveDiagonalSystem(const GpuPxPBlockVec& Hpp, GpuPx1BlockVec& bp, GpuPx1BlockVec& xp);
+
+void solveDiagonalSystem(const GpuLxLBlockVec& Hll, GpuLx1BlockVec& bl, GpuLx1BlockVec& xl);
+
 } // namespace gpu
 
 } // namespace cuba
