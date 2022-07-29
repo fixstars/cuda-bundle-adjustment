@@ -244,6 +244,7 @@ static void readGraph(const std::string& filename, OptimizerCPU& optimizerCPU, O
 
 		landmarkIds.push_back(id);
 	}
+
 	// read monocular edges
 	for (const auto& node : fs["monocular_edges"])
 	{
