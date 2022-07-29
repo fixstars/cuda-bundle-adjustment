@@ -25,8 +25,6 @@ limitations under the License.
 #include <thrust/sort.h>
 #include <thrust/gather.h>
 
-#include "cuda_bundle_adjustment_constants.h"
-
 namespace cuba
 {
 namespace gpu
