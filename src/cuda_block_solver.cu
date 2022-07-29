@@ -53,13 +53,6 @@ constexpr int BLOCK_ACTIVE_ERRORS = 512;
 constexpr int BLOCK_MAX_DIAGONAL = 512;
 constexpr int BLOCK_COMPUTE_SCALE = 512;
 
-__constant__ Scalar c_camera[5];
-#define FX() c_camera[0]
-#define FY() c_camera[1]
-#define CX() c_camera[2]
-#define CY() c_camera[3]
-#define BF() c_camera[4]
-
 ////////////////////////////////////////////////////////////////////////////////////
 // Type definitions
 ////////////////////////////////////////////////////////////////////////////////////
@@ -120,6 +113,19 @@ using ConstMatView3x1d = ConstMatView<Scalar, 3, 1>;
 using ConstMatView3x3d = ConstMatView<Scalar, 3, 3>;
 using ConstMatView6x6d = ConstMatView<Scalar, 6, 6>;
 using ConstMatView6x1d = ConstMatView<Scalar, 6, 1>;
+
+struct CameraParamView
+{
+	__device__ inline CameraParamView(const Scalar* data) : data(data) {}
+	__device__ inline CameraParamView(const Vec5d& camera) : data(camera.data) {}
+	__device__ inline Scalar fx() const { return data[0]; }
+	__device__ inline Scalar fy() const { return data[1]; }
+	__device__ inline Scalar cx() const { return data[2]; }
+	__device__ inline Scalar cy() const { return data[3]; }
+	__device__ inline Scalar bf() const { return data[4]; }
+
+	const Scalar* data;
+};
 
 ////////////////////////////////////////////////////////////////////////////////////
 // Host functions
@@ -262,25 +268,25 @@ __device__ inline void projectW2C(const Vec4d& q, const Vec3d& t, const Vec3d& X
 }
 
 template <int MDIM>
-__device__ inline void projectC2I(const Vec3d& Xc, Vecxd<MDIM>& p)
+__device__ inline void projectC2I(const Vec3d& Xc, Vecxd<MDIM>& p, CameraParamView camera)
 {
 }
 
 template <>
-__device__ inline void projectC2I<2>(const Vec3d& Xc, Vec2d& p)
+__device__ inline void projectC2I<2>(const Vec3d& Xc, Vec2d& p, CameraParamView camera)
 {
 	const Scalar invZ = 1 / Xc[2];
-	p[0] = FX() * invZ * Xc[0] + CX();
-	p[1] = FY() * invZ * Xc[1] + CY();
+	p[0] = camera.fx() * invZ * Xc[0] + camera.cx();
+	p[1] = camera.fy() * invZ * Xc[1] + camera.cy();
 }
 
 template <>
-__device__ inline void projectC2I<3>(const Vec3d& Xc, Vec3d& p)
+__device__ inline void projectC2I<3>(const Vec3d& Xc, Vec3d& p, CameraParamView camera)
 {
 	const Scalar invZ = 1 / Xc[2];
-	p[0] = FX() * invZ * Xc[0] + CX();
-	p[1] = FY() * invZ * Xc[1] + CY();
-	p[2] = p[0] - BF() * invZ;
+	p[0] = camera.fx() * invZ * Xc[0] + camera.cx();
+	p[1] = camera.fy() * invZ * Xc[1] + camera.cy();
+	p[2] = p[0] - camera.bf() * invZ;
 }
 
 __device__ inline void quaternionToRotationMatrix(const Vec4d& q, MatView3x3d R)
@@ -316,12 +322,12 @@ __device__ inline void quaternionToRotationMatrix(const Vec4d& q, MatView3x3d R)
 
 template <int MDIM>
 __device__ void computeJacobians(const Vec3d& Xc, const Vec4d& q,
-	MatView<Scalar, MDIM, PDIM> JP, MatView<Scalar, MDIM, LDIM> JL)
+	MatView<Scalar, MDIM, PDIM> JP, MatView<Scalar, MDIM, LDIM> JL, CameraParamView camera)
 {
 }
 
 template <>
-__device__ void computeJacobians<2>(const Vec3d& Xc, const Vec4d& q, MatView2x6d JP, MatView2x3d JL)
+__device__ void computeJacobians<2>(const Vec3d& Xc, const Vec4d& q, MatView2x6d JP, MatView2x3d JL, CameraParamView camera)
 {
 	const Scalar X = Xc[0];
 	const Scalar Y = Xc[1];
@@ -329,8 +335,8 @@ __device__ void computeJacobians<2>(const Vec3d& Xc, const Vec4d& q, MatView2x6d
 	const Scalar invZ = 1 / Z;
 	const Scalar x = invZ * X;
 	const Scalar y = invZ * Y;
-	const Scalar fu = FX();
-	const Scalar fv = FY();
+	const Scalar fu = camera.fx();
+	const Scalar fv = camera.fy();
 	const Scalar fu_invZ = fu * invZ;
 	const Scalar fv_invZ = fv * invZ;
 
@@ -360,16 +366,16 @@ __device__ void computeJacobians<2>(const Vec3d& Xc, const Vec4d& q, MatView2x6d
 }
 
 template <>
-__device__ void computeJacobians<3>(const Vec3d& Xc, const Vec4d& q, MatView3x6d JP, MatView3x3d JL)
+__device__ void computeJacobians<3>(const Vec3d& Xc, const Vec4d& q, MatView3x6d JP, MatView3x3d JL, CameraParamView camera)
 {
 	const Scalar X = Xc[0];
 	const Scalar Y = Xc[1];
 	const Scalar Z = Xc[2];
 	const Scalar invZ = 1 / Z;
 	const Scalar invZZ = invZ * invZ;
-	const Scalar fu = FX();
-	const Scalar fv = FY();
-	const Scalar bf = BF();
+	const Scalar fu = camera.fx();
+	const Scalar fv = camera.fy();
+	const Scalar bf = camera.bf();
 
 	Matx<Scalar, 3, 3> R;
 	quaternionToRotationMatrix(q, R);
@@ -724,8 +730,9 @@ struct RobustKernelFunc<RobustKernelType::TUKEY>
 // Kernel functions
 ////////////////////////////////////////////////////////////////////////////////////
 template <int MDIM, int RK_TYPE>
-__global__ void computeActiveErrorsKernel(int nedges, const Vec4d* qs, const Vec3d* ts, const Vec3d* Xws, const Vecxd<MDIM>* measurements,
-	const Scalar* omegas, const Vec2i* edge2PL, RobustKernelFunc<RK_TYPE> robustKernel, Vecxd<MDIM>* errors, Vec3d* Xcs, Scalar* chi)
+__global__ void computeActiveErrorsKernel(int nedges, const Vec4d* qs, const Vec3d* ts, const Vec5d* cameras,
+	const Vec3d* Xws, const Vecxd<MDIM>* measurements, const Scalar* omegas, const Vec2i* edge2PL,
+	RobustKernelFunc<RK_TYPE> robustKernel, Vecxd<MDIM>* errors, Vec3d* Xcs, Scalar* chi)
 {
 	using Vecmd = Vecxd<MDIM>;
 
@@ -741,6 +748,7 @@ __global__ void computeActiveErrorsKernel(int nedges, const Vec4d* qs, const Vec
 
 		const Vec4d& q = qs[iP];
 		const Vec3d& t = ts[iP];
+		const Vec5d& camera = cameras[iP];
 		const Vec3d& Xw = Xws[iL];
 		const Vecmd& measurement = measurements[iE];
 
@@ -750,7 +758,7 @@ __global__ void computeActiveErrorsKernel(int nedges, const Vec4d* qs, const Vec
 
 		// project camera to image
 		Vecmd proj;
-		projectC2I(Xc, proj);
+		projectC2I(Xc, proj, camera);
 
 		// compute residual
 		Vecmd error;
@@ -778,8 +786,7 @@ __global__ void computeActiveErrorsKernel(int nedges, const Vec4d* qs, const Vec
 }
 
 template <int MDIM, int RK_TYPE>
-__global__ void constructQuadraticFormKernel(int nedges,
-	const Vec3d* Xcs, const Vec4d* qs, const Vecxd<MDIM>* errors,
+__global__ void constructQuadraticFormKernel(int nedges, const Vec3d* Xcs, const Vec4d* qs, const Vec5d* cameras, const Vecxd<MDIM>* errors,
 	const Scalar* omegas, const Vec2i* edge2PL, const int* edge2Hpl, const uint8_t* flags, RobustKernelFunc<RK_TYPE> robustKernel,
 	PxPBlockPtr Hpp, Px1BlockPtr bp, LxLBlockPtr Hll, Lx1BlockPtr bl, PxLBlockPtr Hpl)
 {
@@ -794,6 +801,7 @@ __global__ void constructQuadraticFormKernel(int nedges,
 	const int flag = flags[iE];
 
 	const Vec4d& q = qs[iP];
+	const Vec5d& camera = cameras[iP];
 	const Vec3d& Xc = Xcs[iE];
 	const Vecmd& error = errors[iE];
 
@@ -805,7 +813,7 @@ __global__ void constructQuadraticFormKernel(int nedges,
 	// compute Jacobians
 	Scalar JP[MDIM * PDIM];
 	Scalar JL[MDIM * LDIM];
-	computeJacobians<MDIM>(Xc, q, JP, JL);
+	computeJacobians<MDIM>(Xc, q, JP, JL, camera);
 
 	if (!(flag & EDGE_FLAG_FIXED_P))
 	{
@@ -1104,11 +1112,6 @@ void waitForKernelCompletion()
 	CUDA_CHECK(cudaDeviceSynchronize());
 }
 
-void setCameraParameters(const Scalar* camera)
-{
-	CUDA_CHECK(cudaMemcpyToSymbol(c_camera, camera, sizeof(Scalar) * 5));
-}
-
 void exclusiveScan(const int* src, int* dst, int size)
 {
 	auto ptrSrc = thrust::device_pointer_cast(src);
@@ -1151,7 +1154,7 @@ void findHschureMulBlockIndices(const GpuHplBlockMat& Hpl, const GpuHscBlockMat&
 }
 
 template <int MDIM, int RK_TYPE = 0>
-Scalar computeActiveErrors_(const GpuVec4d& qs, const GpuVec3d& ts, const GpuVec3d& Xws,
+Scalar computeActiveErrors_(const GpuVec4d& qs, const GpuVec3d& ts, const GpuVec5d& cameras, const GpuVec3d& Xws,
 	const GpuVecAny& _measurements, const GpuVec1d& omegas, const GpuVec2i& edge2PL, Scalar robustDelta,
 	const GpuVecAny& _errors, GpuVec3d& Xcs, Scalar* chi)
 {
@@ -1167,7 +1170,7 @@ Scalar computeActiveErrors_(const GpuVec4d& qs, const GpuVec3d& ts, const GpuVec
 		return 0;
 
 	CUDA_CHECK(cudaMemset(chi, 0, sizeof(Scalar)));
-	computeActiveErrorsKernel<MDIM, RK_TYPE><<<grid, block>>>(nedges, qs, ts, Xws, measurements, omegas,
+	computeActiveErrorsKernel<MDIM, RK_TYPE><<<grid, block>>>(nedges, qs, ts, cameras, Xws, measurements, omegas,
 		edge2PL, robustKernel, errors, Xcs, chi);
 	CUDA_CHECK(cudaGetLastError());
 
@@ -1177,7 +1180,7 @@ Scalar computeActiveErrors_(const GpuVec4d& qs, const GpuVec3d& ts, const GpuVec
 	return h_chi;
 }
 
-using ComputeActiveErrorsFunc = Scalar(*)(const GpuVec4d&, const GpuVec3d&, const GpuVec3d&,
+using ComputeActiveErrorsFunc = Scalar(*)(const GpuVec4d&, const GpuVec3d&, const GpuVec5d&, const GpuVec3d&,
 	const GpuVecAny&, const GpuVec1d&, const GpuVec2i&, Scalar, const GpuVecAny&, GpuVec3d&, Scalar*);
 
 static ComputeActiveErrorsFunc computeActiveErrorsFuncs[6] =
@@ -1190,24 +1193,24 @@ static ComputeActiveErrorsFunc computeActiveErrorsFuncs[6] =
 	computeActiveErrors_<3, 2>
 };
 
-Scalar computeActiveErrors(const GpuVec4d& qs, const GpuVec3d& ts, const GpuVec3d& Xws,
+Scalar computeActiveErrors(const GpuVec4d& qs, const GpuVec3d& ts, const GpuVec5d& cameras, const GpuVec3d& Xws,
 	const GpuVec2d& measurements, const GpuVec1d& omegas, const GpuVec2i& edge2PL, const RobustKernel& kernel,
 	GpuVec2d& errors, GpuVec3d& Xcs, Scalar* chi)
 {
 	auto func = computeActiveErrorsFuncs[0 + kernel.type];
-	return func(qs, ts, Xws, measurements, omegas, edge2PL, kernel.delta, errors, Xcs, chi);
+	return func(qs, ts, cameras, Xws, measurements, omegas, edge2PL, kernel.delta, errors, Xcs, chi);
 }
 
-Scalar computeActiveErrors(const GpuVec4d& qs, const GpuVec3d& ts, const GpuVec3d& Xws,
+Scalar computeActiveErrors(const GpuVec4d& qs, const GpuVec3d& ts, const GpuVec5d& cameras, const GpuVec3d& Xws,
 	const GpuVec3d& measurements, const GpuVec1d& omegas, const GpuVec2i& edge2PL, const RobustKernel& kernel,
 	GpuVec3d& errors, GpuVec3d& Xcs, Scalar* chi)
 {
 	auto func = computeActiveErrorsFuncs[3 + kernel.type];
-	return func(qs, ts, Xws, measurements, omegas, edge2PL, kernel.delta, errors, Xcs, chi);
+	return func(qs, ts, cameras, Xws, measurements, omegas, edge2PL, kernel.delta, errors, Xcs, chi);
 }
 
 template <int MDIM, int RK_TYPE = 0>
-void constructQuadraticForm_(const GpuVec3d& Xcs, const GpuVec4d& qs, const GpuVecAny& _errors,
+void constructQuadraticForm_(const GpuVec3d& Xcs, const GpuVec4d& qs, const GpuVec5d& cameras, const GpuVecAny& _errors,
 	const GpuVec1d& omegas, const GpuVec2i& edge2PL, const GpuVec1i& edge2Hpl, const GpuVec1b& flags, Scalar robustDelta,
 	GpuPxPBlockVec& Hpp, GpuPx1BlockVec& bp, GpuLxLBlockVec& Hll, GpuLx1BlockVec& bl, GpuHplBlockMat& Hpl)
 {
@@ -1221,12 +1224,12 @@ void constructQuadraticForm_(const GpuVec3d& Xcs, const GpuVec4d& qs, const GpuV
 	if (nedges <= 0)
 		return;
 
-	constructQuadraticFormKernel<MDIM, RK_TYPE><<<grid, block>>>(nedges, Xcs, qs, errors, omegas,
+	constructQuadraticFormKernel<MDIM, RK_TYPE><<<grid, block>>>(nedges, Xcs, qs, cameras, errors, omegas,
 		edge2PL, edge2Hpl, flags, robustKernel, Hpp, bp, Hll, bl, Hpl);
 	CUDA_CHECK(cudaGetLastError());
 }
 
-using ConstructQuadraticFormFunc = void(*)(const GpuVec3d&, const GpuVec4d&, const GpuVecAny&,
+using ConstructQuadraticFormFunc = void(*)(const GpuVec3d&, const GpuVec4d&, const GpuVec5d&, const GpuVecAny&,
 	const GpuVec1d&, const GpuVec2i&, const GpuVec1i&, const GpuVec1b&, Scalar,
 	GpuPxPBlockVec&, GpuPx1BlockVec&, GpuLxLBlockVec&, GpuLx1BlockVec&, GpuHplBlockMat&);
 
@@ -1240,20 +1243,20 @@ static ConstructQuadraticFormFunc constructQuadraticFormFuncs[6] =
 	constructQuadraticForm_<3, 2>
 };
 
-void constructQuadraticForm(const GpuVec3d& Xcs, const GpuVec4d& qs, const GpuVec2d& errors,
+void constructQuadraticForm(const GpuVec3d& Xcs, const GpuVec4d& qs, const GpuVec5d& cameras, const GpuVec2d& errors,
 	const GpuVec1d& omegas, const GpuVec2i& edge2PL, const GpuVec1i& edge2Hpl, const GpuVec1b& flags, const RobustKernel& kernel,
 	GpuPxPBlockVec& Hpp, GpuPx1BlockVec& bp, GpuLxLBlockVec& Hll, GpuLx1BlockVec& bl, GpuHplBlockMat& Hpl)
 {
 	auto func = constructQuadraticFormFuncs[0 + kernel.type];
-	func(Xcs, qs, errors, omegas, edge2PL, edge2Hpl, flags, kernel.delta, Hpp, bp, Hll, bl, Hpl);
+	func(Xcs, qs, cameras, errors, omegas, edge2PL, edge2Hpl, flags, kernel.delta, Hpp, bp, Hll, bl, Hpl);
 }
 
-void constructQuadraticForm(const GpuVec3d& Xcs, const GpuVec4d& qs, const GpuVec3d& errors,
+void constructQuadraticForm(const GpuVec3d& Xcs, const GpuVec4d& qs, const GpuVec5d& cameras, const GpuVec3d& errors,
 	const GpuVec1d& omegas, const GpuVec2i& edge2PL, const GpuVec1i& edge2Hpl, const GpuVec1b& flags, const RobustKernel& kernel,
 	GpuPxPBlockVec& Hpp, GpuPx1BlockVec& bp, GpuLxLBlockVec& Hll, GpuLx1BlockVec& bl, GpuHplBlockMat& Hpl)
 {
 	auto func = constructQuadraticFormFuncs[3 + kernel.type];
-	func(Xcs, qs, errors, omegas, edge2PL, edge2Hpl, flags, kernel.delta, Hpp, bp, Hll, bl, Hpl);
+	func(Xcs, qs, cameras, errors, omegas, edge2PL, edge2Hpl, flags, kernel.delta, Hpp, bp, Hll, bl, Hpl);
 }
 
 template <typename T, int DIM>

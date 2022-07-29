@@ -93,6 +93,14 @@ static cuba::CudaBundleAdjustment::Ptr readGraph(const std::string& filename)
 	cv::FileStorage fs(filename, cv::FileStorage::READ);
 	CV_Assert(fs.isOpened());
 
+	// read camera parameters
+	cuba::CameraParams camera;
+	camera.fx = fs["fx"];
+	camera.fy = fs["fy"];
+	camera.cx = fs["cx"];
+	camera.cy = fs["cy"];
+	camera.bf = fs["bf"];
+
 	auto optimizer = cuba::CudaBundleAdjustment::create();
 
 	// read pose vertices
@@ -103,7 +111,7 @@ static cuba::CudaBundleAdjustment::Ptr readGraph(const std::string& filename)
 		const auto q = Eigen::Quaterniond(getArray<double, 4>(node["q"]));
 		const auto t = getArray<double, 3>(node["t"]);
 
-		auto v = obj.create<cuba::PoseVertex>(id, q, t, fixed);
+		auto v = obj.create<cuba::PoseVertex>(id, q, t, camera, fixed);
 		optimizer->addPoseVertex(v);
 	}
 
@@ -147,16 +155,6 @@ static cuba::CudaBundleAdjustment::Ptr readGraph(const std::string& filename)
 		auto e = obj.create<cuba::StereoEdge>(measurement, information, vertexP, vertexL);
 		optimizer->addStereoEdge(e);
 	}
-
-	// read camera parameters
-	cuba::CameraParams camera;
-	camera.fx = fs["fx"];
-	camera.fy = fs["fy"];
-	camera.cx = fs["cx"];
-	camera.cy = fs["cy"];
-	camera.bf = fs["bf"];
-
-	optimizer->setCameraPrams(camera);
 
 	// "warm-up" to avoid overhead
 	optimizer->initialize();

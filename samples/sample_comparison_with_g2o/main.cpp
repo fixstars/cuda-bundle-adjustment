@@ -192,8 +192,6 @@ static void readGraph(const std::string& filename, OptimizerCPU& optimizerCPU, O
 	camera.cy = fs["cy"];
 	camera.bf = fs["bf"];
 
-	optimizerGPU.setCameraPrams(camera);
-
 	const cuba::RobustKernelType robustKernelType = cuba::RobustKernelType::HUBER;
 	const double deltaMono = sqrt(5.991);
 	const double deltaStereo = sqrt(7.815);
@@ -217,7 +215,7 @@ static void readGraph(const std::string& filename, OptimizerCPU& optimizerCPU, O
 		optimizerCPU.addVertex(vcpu);
 
 		// add pose vertex to GPU optimizer
-		auto vgpu = obj.create<cuba::PoseVertex>(id, q, t, fixed);
+		auto vgpu = obj.create<cuba::PoseVertex>(id, q, t, camera, fixed);
 		optimizerGPU.addPoseVertex(vgpu);
 
 		poseIds.push_back(id);

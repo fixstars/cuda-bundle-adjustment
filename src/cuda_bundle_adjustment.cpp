@@ -57,6 +57,17 @@ static constexpr Scalar ScalarCast(T v) { return static_cast<Scalar>(v); }
 template <typename T>
 static constexpr int IntCast(T v) { return static_cast<int>(v); }
 
+static Vec5d vectorize(const CameraParams& camera)
+{
+	Vec5d v;
+	v[0] = ScalarCast(camera.fx);
+	v[1] = ScalarCast(camera.fy);
+	v[2] = ScalarCast(camera.cx);
+	v[3] = ScalarCast(camera.cy);
+	v[4] = ScalarCast(camera.bf);
+	return v;
+}
+
 /** @brief Implementation of Block solver.
 */
 class CudaBlockSolver
@@ -102,7 +113,7 @@ public:
 	}
 
 	void initialize(const VertexMapP& vertexMapP, const VertexMapL& vertexMapL,
-		const EdgeSet2D& edgeSet2D, const EdgeSet3D& edgeSet3D, const CameraParams& camera, const RobustKernel kernels[])
+		const EdgeSet2D& edgeSet2D, const EdgeSet3D& edgeSet3D, const RobustKernel kernels[])
 	{
 		const auto t0 = get_time_point();
 
@@ -136,6 +147,7 @@ public:
 				verticesP_.push_back(vertexP);
 				qs_.emplace_back(vertexP->q.coeffs().data());
 				ts_.emplace_back(vertexP->t.data());
+				cameras_.emplace_back(vectorize(vertexP->camera));
 			}
 			else
 			{
@@ -171,6 +183,7 @@ public:
 			verticesP_.push_back(vertexP);
 			qs_.emplace_back(vertexP->q.coeffs().data());
 			ts_.emplace_back(vertexP->t.data());
+			cameras_.emplace_back(vectorize(vertexP->camera));
 		}
 
 		for (auto vertexL : fixedVerticesL_)
@@ -226,15 +239,6 @@ public:
 		nedges2D_ = nedges2D;
 		nedges3D_ = nedges3D;
 		nHplBlocks_ = static_cast<int>(HplBlockPos_.size());
-
-		// upload camera parameters to constant memory
-		std::vector<Scalar> cameraParams(5);
-		cameraParams[0] = ScalarCast(camera.fx);
-		cameraParams[1] = ScalarCast(camera.fy);
-		cameraParams[2] = ScalarCast(camera.cx);
-		cameraParams[3] = ScalarCast(camera.cy);
-		cameraParams[4] = ScalarCast(camera.bf);
-		gpu::setCameraParameters(cameraParams.data());
 
 		// set robust kernels
 		for (int i = 0; i < EDGE_TYPE_NUM; i++)
@@ -336,6 +340,9 @@ public:
 		d_edgeFlags3D_.assign(nedges3D_, edgeFlags_.data() + nedges2D_);
 		d_chi_.resize(1);
 
+		// upload camera parameters to device memory
+		d_cameras_.assign(cameras_.size(), cameras_.data());
+
 		const auto t1 = get_time_point();
 
 		// analyze pattern of Hschur matrix (symbolic decomposition)
@@ -352,10 +359,10 @@ public:
 	{
 		const auto t0 = get_time_point();
 
-		const Scalar chi2D = gpu::computeActiveErrors(d_qs_, d_ts_, d_Xws_, d_measurements2D_,
+		const Scalar chi2D = gpu::computeActiveErrors(d_qs_, d_ts_, d_cameras_, d_Xws_, d_measurements2D_,
 			d_omegas2D_, d_edge2PL2D_, kernels_[0], d_errors2D_, d_Xcs2D_, d_chi_);
 
-		const Scalar chi3D = gpu::computeActiveErrors(d_qs_, d_ts_, d_Xws_, d_measurements3D_,
+		const Scalar chi3D = gpu::computeActiveErrors(d_qs_, d_ts_, d_cameras_, d_Xws_, d_measurements3D_,
 			d_omegas3D_, d_edge2PL3D_, kernels_[1], d_errors3D_, d_Xcs3D_, d_chi_);
 
 		const auto t1 = get_time_point();
@@ -382,10 +389,10 @@ public:
 		d_bp_.fillZero();
 		d_bl_.fillZero();
 
-		gpu::constructQuadraticForm(d_Xcs2D_, d_qs_, d_errors2D_, d_omegas2D_, d_edge2PL2D_,
+		gpu::constructQuadraticForm(d_Xcs2D_, d_qs_, d_cameras_, d_errors2D_, d_omegas2D_, d_edge2PL2D_,
 			d_edge2Hpl2D_, d_edgeFlags2D_, kernels_[0], d_Hpp_, d_bp_, d_Hll_, d_bl_, d_Hpl_);
 
-		gpu::constructQuadraticForm(d_Xcs3D_, d_qs_, d_errors3D_, d_omegas3D_, d_edge2PL3D_,
+		gpu::constructQuadraticForm(d_Xcs3D_, d_qs_, d_cameras_, d_errors3D_, d_omegas3D_, d_edge2PL3D_,
 			d_edge2Hpl3D_, d_edgeFlags3D_, kernels_[1], d_Hpp_, d_bp_, d_Hll_, d_bl_, d_Hpl_);
 
 		const auto t1 = get_time_point();
@@ -567,6 +574,9 @@ private:
 	std::vector<HplBlockPos> HplBlockPos_;
 	int nHplBlocks_;
 
+	// camera parameters
+	std::vector<Vec5d> cameras_;
+
 	// robust kernels
 	RobustKernel kernels_[EDGE_TYPE_NUM];
 
@@ -618,6 +628,9 @@ private:
 	// conversion matrix storage format BSR to CSR
 	GpuVec1d d_HscCSR_;
 	GpuVec1i d_BSR2CSR_;
+
+	// camera parameters
+	GpuVec5d d_cameras_;
 
 	// temporary buffer
 	DeviceBuffer<Scalar> d_chi_;
@@ -721,11 +734,6 @@ public:
 		}
 	}
 
-	void setCameraPrams(const CameraParams& camera) override
-	{
-		camera_ = camera;
-	}
-
 	size_t nposes() const override
 	{
 		return vertexMapP_.size();
@@ -748,7 +756,7 @@ public:
 
 	void initialize() override
 	{
-		solver_.initialize(vertexMapP_, vertexMapL_, edges2D_, edges3D_, camera_, kernels_);
+		solver_.initialize(vertexMapP_, vertexMapL_, edges2D_, edges3D_, kernels_);
 
 		stats_.clear();
 	}
@@ -853,7 +861,6 @@ private:
 	VertexMapL vertexMapL_;
 	EdgeSet2D edges2D_;
 	EdgeSet3D edges3D_;
-	CameraParams camera_;
 	RobustKernel kernels_[EDGE_TYPE_NUM];
 
 	BatchStatistics stats_;
