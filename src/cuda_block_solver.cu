@@ -28,7 +28,7 @@ limitations under the License.
 namespace cuba
 {
 namespace gpu
-{	
+{
 
 ////////////////////////////////////////////////////////////////////////////////////
 // Type alias
@@ -700,6 +700,7 @@ __global__ void computeActiveErrorsKernel(int nedges, const Vec4d* qs, const Vec
 
 		sumchi += robustKernel.robustify(omegas[iE] * squaredNorm(error));
 	}
+
 	cache[sharedIdx] = sumchi;
 	__syncthreads();
 
@@ -726,7 +727,6 @@ __global__ void constructQuadraticFormKernel(int nedges,
 	if (iE >= nedges)
 		return;
 
-	//const Scalar omega = omegas[iE];
 	const int iP = edge2PL[iE][0];
 	const int iL = edge2PL[iE][1];
 	const int iPL = edge2Hpl[iE];

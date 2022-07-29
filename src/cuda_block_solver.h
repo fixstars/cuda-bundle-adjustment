@@ -16,9 +16,9 @@ limitations under the License.
 
 #ifndef __CUDA_BLOCK_SOLVER_H__
 #define __CUDA_BLOCK_SOLVER_H__
-#include "robust_kernel.h"
 
 #include "device_matrix.h"
+#include "robust_kernel.h"
 
 namespace cuba
 {
