@@ -87,7 +87,6 @@ public:
 		verticesP_.clear();
 		verticesL_.clear();
 		baseEdges_.clear();
-		HplBlockPos_.clear();
 		qs_.clear();
 		ts_.clear();
 		Xws_.clear();
@@ -96,6 +95,10 @@ public:
 		omegas_.clear();
 		edge2PL_.clear();
 		edgeFlags_.clear();
+		HplBlockPos_.clear();
+
+		numP_ = numL_ = nedges2D_ = nedges3D_ = nHplBlocks_ = 0;
+		optimizeP_ = optimizeL_ = false;
 	}
 
 	void initialize(const VertexMapP& vertexMapP, const VertexMapL& vertexMapL,
@@ -103,23 +106,20 @@ public:
 	{
 		const auto t0 = get_time_point();
 
-		nedges2D_ = static_cast<int>(edgeSet2D.size());
-		nedges3D_ = static_cast<int>(edgeSet3D.size());
-
 		clear();
 
 		verticesP_.reserve(vertexMapP.size());
 		verticesL_.reserve(vertexMapL.size());
-		baseEdges_.reserve(nedges2D_ + nedges3D_);
-		HplBlockPos_.reserve(nedges2D_ + nedges3D_);
+		baseEdges_.reserve(edgeSet2D.size() + edgeSet3D.size());
+		HplBlockPos_.reserve(edgeSet2D.size() + edgeSet3D.size());
 		qs_.reserve(vertexMapP.size());
 		ts_.reserve(vertexMapP.size());
 		Xws_.reserve(vertexMapL.size());
-		measurements2D_.reserve(nedges2D_);
-		measurements3D_.reserve(nedges3D_);
-		omegas_.reserve(nedges2D_ + nedges3D_);
-		edge2PL_.reserve(nedges2D_ + nedges3D_);
-		edgeFlags_.reserve(nedges2D_ + nedges3D_);
+		measurements2D_.reserve(edgeSet2D.size());
+		measurements3D_.reserve(edgeSet3D.size());
+		omegas_.reserve(edgeSet2D.size() + edgeSet3D.size());
+		edge2PL_.reserve(edgeSet2D.size() + edgeSet3D.size());
+		edgeFlags_.reserve(edgeSet2D.size() + edgeSet3D.size());
 
 		std::vector<VertexP*> fixedVerticesP_;
 		std::vector<VertexL*> fixedVerticesL_;
@@ -181,23 +181,25 @@ public:
 		}
 
 		// gather each edge members into each vector
-		int edgeId = 0;
+		int edgeId = 0, nedges2D = 0, nedges3D = 0;
 		for (const auto e : edgeSet2D)
 		{
 			const auto vertexP = e->vertexP;
 			const auto vertexL = e->vertexL;
 
-			baseEdges_.push_back(e);
-
 			if (!vertexP->fixed && !vertexL->fixed)
 				HplBlockPos_.push_back({ vertexP->iP, vertexL->iL, edgeId });
 
-			measurements2D_.emplace_back(e->measurement.data());
-			omegas_.push_back(ScalarCast(e->information));
-			edge2PL_.push_back({ vertexP->iP, vertexL->iL });
-			edgeFlags_.push_back(makeEdgeFlag(vertexP->fixed, vertexL->fixed));
-
-			edgeId++;
+			if (!vertexP->fixed || !vertexL->fixed)
+			{
+				baseEdges_.push_back(e);
+				measurements2D_.emplace_back(e->measurement.data());
+				omegas_.push_back(ScalarCast(e->information));
+				edge2PL_.push_back({ vertexP->iP, vertexL->iL });
+				edgeFlags_.push_back(makeEdgeFlag(vertexP->fixed, vertexL->fixed));
+				edgeId++;
+				nedges2D++;
+			}
 		}
 
 		// gather each edge members into each vector
@@ -206,19 +208,23 @@ public:
 			const auto vertexP = e->vertexP;
 			const auto vertexL = e->vertexL;
 
-			baseEdges_.push_back(e);
-			
 			if (!vertexP->fixed && !vertexL->fixed)
 				HplBlockPos_.push_back({ vertexP->iP, vertexL->iL, edgeId });
 
-			measurements3D_.emplace_back(e->measurement.data());
-			omegas_.push_back(ScalarCast(e->information));
-			edge2PL_.push_back({ vertexP->iP, vertexL->iL });
-			edgeFlags_.push_back(makeEdgeFlag(vertexP->fixed, vertexL->fixed));
-
-			edgeId++;
+			if (!vertexP->fixed || !vertexL->fixed)
+			{
+				baseEdges_.push_back(e);
+				measurements3D_.emplace_back(e->measurement.data());
+				omegas_.push_back(ScalarCast(e->information));
+				edge2PL_.push_back({ vertexP->iP, vertexL->iL });
+				edgeFlags_.push_back(makeEdgeFlag(vertexP->fixed, vertexL->fixed));
+				edgeId++;
+				nedges3D++;
+			}
 		}
 
+		nedges2D_ = nedges2D;
+		nedges3D_ = nedges3D;
 		nHplBlocks_ = static_cast<int>(HplBlockPos_.size());
 
 		// upload camera parameters to constant memory
