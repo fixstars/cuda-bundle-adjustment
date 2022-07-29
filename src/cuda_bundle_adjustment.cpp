@@ -519,6 +519,23 @@ public:
 			Xws_[i].copyTo(verticesL_[i]->Xw.data());
 	}
 
+	void getChiSqs(std::unordered_map<const BaseEdge*, double>& chiSqs)
+	{
+		chiSqs.clear();
+
+		chiSqs_.resize(baseEdges_.size());
+
+		// compute chi-squares
+		gpu::computeChiSquares(d_qs_, d_ts_, d_cameras_, d_Xws_, d_measurements2D_,
+			d_omegas2D_, d_edge2PL2D_, d_chiSqs2D_);
+		gpu::computeChiSquares(d_qs_, d_ts_, d_cameras_, d_Xws_, d_measurements3D_,
+			d_omegas3D_, d_edge2PL3D_, d_chiSqs3D_);
+		d_chiSqs_.download(chiSqs_.data());
+
+		for (size_t i = 0; i < chiSqs_.size(); i++)
+			chiSqs[baseEdges_[i]] = chiSqs_[i];
+	}
+
 	void getTimeProfile(TimeProfile& prof) const
 	{
 		static const char* profileItemString[PROF_ITEM_NUM] =
@@ -536,23 +553,6 @@ public:
 		prof.clear();
 		for (int i = 0; i < PROF_ITEM_NUM; i++)
 			prof[profileItemString[i]] = profItems_[i];
-	}
-
-	void getChiSqs(std::unordered_map<const BaseEdge*, double>& chiSqs)
-	{
-		chiSqs.clear();
-
-		chiSqs_.resize(baseEdges_.size());
-
-		// compute chi-squares
-		gpu::computeChiSquares(d_qs_, d_ts_, d_cameras_, d_Xws_, d_measurements2D_,
-			d_omegas2D_, d_edge2PL2D_, d_chiSqs2D_);
-		gpu::computeChiSquares(d_qs_, d_ts_, d_cameras_, d_Xws_, d_measurements3D_,
-			d_omegas3D_, d_edge2PL3D_, d_chiSqs3D_);
-		d_chiSqs_.download(chiSqs_.data());
-
-		for (size_t i = 0; i < chiSqs_.size(); i++)
-			chiSqs[baseEdges_[i]] = chiSqs_[i];
 	}
 
 private:
@@ -846,10 +846,8 @@ public:
 		}
 
 		solver_.finalize();
-
-		solver_.getTimeProfile(timeProfile_);
-
 		solver_.getChiSqs(chiSqs_);
+		solver_.getTimeProfile(timeProfile_);
 	}
 
 	void clear() override
