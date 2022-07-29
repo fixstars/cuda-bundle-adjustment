@@ -18,7 +18,6 @@ limitations under the License.
 #define __CUDA_BUNDLE_ADJUSTMENT_H__
 
 #include "cuda_bundle_adjustment_types.h"
-#include "cuda_bundle_adjustment_constants.h"
 
 namespace cuba
 {
@@ -95,6 +94,10 @@ public:
 	*/
 	virtual size_t nedges() const = 0;
 
+	/** @brief Sets robust kernels to specified edges.
+	*/
+	virtual void setRobustKernels(RobustKernelType kernelType, double delta, EdgeType edgeType) = 0;
+
 	/** @brief Initializes the graph.
 	*/
 	virtual void initialize() = 0;
@@ -115,10 +118,6 @@ public:
 	/** @brief Returns the time profile.
 	*/
 	virtual const TimeProfile& timeProfile() = 0;
-
-	/** @brief Set robust kernel
-	*/
-	virtual void setRobustKernel(RobustKernelType type, const double delta = 1) = 0;
 
 	/** @brief the destructor.
 	*/

@@ -27,9 +27,12 @@ limitations under the License.
 #include "device_matrix.h"
 #include "cuda_block_solver.h"
 #include "cuda_linear_solver.h"
+#include "robust_kernel.h"
 
 namespace cuba
 {
+
+static constexpr int EDGE_TYPE_NUM = static_cast<int>(EdgeType::COUNT);
 
 using VertexMapP = std::map<int, VertexP*>;
 using VertexMapL = std::map<int, VertexL*>;
@@ -50,6 +53,9 @@ static inline double get_duration(const time_point& from, const time_point& to)
 
 template <typename T>
 static constexpr Scalar ScalarCast(T v) { return static_cast<Scalar>(v); }
+
+template <typename T>
+static constexpr int IntCast(T v) { return static_cast<int>(v); }
 
 /** @brief Implementation of Block solver.
 */
@@ -93,7 +99,7 @@ public:
 	}
 
 	void initialize(const VertexMapP& vertexMapP, const VertexMapL& vertexMapL,
-		const EdgeSet2D& edgeSet2D, const EdgeSet3D& edgeSet3D, const CameraParams& camera, const RobustKernelType type, const Scalar delta)
+		const EdgeSet2D& edgeSet2D, const EdgeSet3D& edgeSet3D, const CameraParams& camera, const RobustKernel kernels[])
 	{
 		const auto t0 = get_time_point();
 
@@ -222,6 +228,10 @@ public:
 		cameraParams[4] = ScalarCast(camera.bf);
 		gpu::setCameraParameters(cameraParams.data());
 
+		// set robust kernels
+		for (int i = 0; i < EDGE_TYPE_NUM; i++)
+			kernels_[i] = kernels[i];
+
 		// create sparse linear solver
 		if (!linearSolver_)
 			linearSolver_ = SparseLinearSolver::create();
@@ -230,9 +240,6 @@ public:
 
 		const auto t1 = get_time_point();
 		profItems_[PROF_ITEM_INITIALIZE] += get_duration(t0, t1);
-
-		robustKernelType_ = type;
-		delta_ = delta;
 	}
 
 	void buildStructure()
@@ -328,10 +335,10 @@ public:
 		const auto t0 = get_time_point();
 
 		const Scalar chi2D = gpu::computeActiveErrors(d_qs_, d_ts_, d_Xws_, d_measurements2D_,
-			d_omegas2D_, d_edge2PL2D_, d_errors2D_, d_Xcs2D_, d_chi_, robustKernelType_, delta_);
+			d_omegas2D_, d_edge2PL2D_, kernels_[0], d_errors2D_, d_Xcs2D_, d_chi_);
 
 		const Scalar chi3D = gpu::computeActiveErrors(d_qs_, d_ts_, d_Xws_, d_measurements3D_,
-			d_omegas3D_, d_edge2PL3D_, d_errors3D_, d_Xcs3D_, d_chi_, robustKernelType_, delta_);
+			d_omegas3D_, d_edge2PL3D_, kernels_[1], d_errors3D_, d_Xcs3D_, d_chi_);
 
 		const auto t1 = get_time_point();
 		profItems_[PROF_ITEM_COMPUTE_ERROR] += get_duration(t0, t1);
@@ -358,10 +365,10 @@ public:
 		d_bl_.fillZero();
 
 		gpu::constructQuadraticForm(d_Xcs2D_, d_qs_, d_errors2D_, d_omegas2D_, d_edge2PL2D_,
-			d_edge2Hpl2D_, d_edgeFlags2D_, d_Hpp_, d_bp_, d_Hll_, d_bl_, d_Hpl_, robustKernelType_, delta_);
+			d_edge2Hpl2D_, d_edgeFlags2D_, kernels_[0], d_Hpp_, d_bp_, d_Hll_, d_bl_, d_Hpl_);
 
 		gpu::constructQuadraticForm(d_Xcs3D_, d_qs_, d_errors3D_, d_omegas3D_, d_edge2PL3D_,
-			d_edge2Hpl3D_, d_edgeFlags3D_, d_Hpp_, d_bp_, d_Hll_, d_bl_, d_Hpl_, robustKernelType_, delta_);
+			d_edge2Hpl3D_, d_edgeFlags3D_, kernels_[1], d_Hpp_, d_bp_, d_Hll_, d_bl_, d_Hpl_);
 
 		const auto t1 = get_time_point();
 		profItems_[PROF_ITEM_BUILD_SYSTEM] += get_duration(t0, t1);
@@ -528,6 +535,9 @@ private:
 	std::vector<HplBlockPos> HplBlockPos_;
 	int nHplBlocks_;
 
+	// robust kernels
+	RobustKernel kernels_[EDGE_TYPE_NUM];
+
 	////////////////////////////////////////////////////////////////////////////////////
 	// device buffers
 	////////////////////////////////////////////////////////////////////////////////////
@@ -586,13 +596,6 @@ private:
 	////////////////////////////////////////////////////////////////////////////////////
 
 	std::vector<double> profItems_;
-
-	////////////////////////////////////////////////////////////////////////////////////
-	// Robust Kernel
-	////////////////////////////////////////////////////////////////////////////////////
-
-	RobustKernelType robustKernelType_;
-	Scalar delta_;
 };
 
 /** @brief Implementation of CudaBundleAdjustment.
@@ -600,10 +603,7 @@ private:
 class CudaBundleAdjustmentImpl : public CudaBundleAdjustment
 {
 public:
-	CudaBundleAdjustmentImpl()
-	{
-		robustKernelType_ = cuba::ROBUST_KERNEL_NONE;
-	}
+
 	void addPoseVertex(VertexP* v) override
 	{
 		vertexMapP_.insert({ v->id, v });
@@ -709,9 +709,14 @@ public:
 		return edges2D_.size() + edges3D_.size();
 	}
 
+	void setRobustKernels(RobustKernelType kernelType, double delta, EdgeType edgeType)
+	{
+		kernels_[IntCast(edgeType)] = RobustKernel(IntCast(kernelType), delta);
+	}
+
 	void initialize() override
 	{
-		solver_.initialize(vertexMapP_, vertexMapL_, edges2D_, edges3D_, camera_, robustKernelType_, delta_);
+		solver_.initialize(vertexMapP_, vertexMapL_, edges2D_, edges3D_, camera_, kernels_);
 
 		stats_.clear();
 	}
@@ -800,12 +805,6 @@ public:
 	{
 		return timeProfile_;
 	}
-	void setRobustKernel(const RobustKernelType type, const double delta = 1) override
-	{
-		robustKernelType_ = type;
-		delta_ = ScalarCast(delta);
-	}
-
 
 	~CudaBundleAdjustmentImpl()
 	{
@@ -823,6 +822,7 @@ private:
 	EdgeSet2D edges2D_;
 	EdgeSet3D edges3D_;
 	CameraParams camera_;
+	RobustKernel kernels_[EDGE_TYPE_NUM];
 
 	BatchStatistics stats_;
 	TimeProfile timeProfile_;

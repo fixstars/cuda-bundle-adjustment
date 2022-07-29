@@ -21,7 +21,6 @@ limitations under the License.
 #include "constants.h"
 #include "fixed_vector.h"
 #include "device_buffer.h"
-#include "cuda_bundle_adjustment_constants.h"
 
 namespace cuba
 {
@@ -184,6 +183,20 @@ using GpuLxLBlockVec = DeviceBlockVector<Scalar, LDIM, LDIM>;
 using GpuPxLBlockVec = DeviceBlockVector<Scalar, PDIM, LDIM>;
 using GpuPx1BlockVec = DeviceBlockVector<Scalar, PDIM, 1>;
 using GpuLx1BlockVec = DeviceBlockVector<Scalar, LDIM, 1>;
+
+class GpuVecAny
+{
+public:
+
+	GpuVecAny() : ptr_(nullptr) {}
+	template <typename T> GpuVecAny(const GpuVec<T>& vec) : ptr_((void*)&vec) {}
+	template <typename T> GpuVec<T>& getRef() const { return *((GpuVec<T>*)ptr_); }
+	template <typename T> const GpuVec<T>& getCRef() const { return *((GpuVec<T>*)ptr_); }
+
+private:
+
+	void* ptr_;
+};
 
 } // namespace cuba
 
