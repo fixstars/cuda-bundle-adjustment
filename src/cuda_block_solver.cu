@@ -113,9 +113,13 @@ struct Matx
 
 using MatView2x3d = MatView<Scalar, 2, 3>;
 using MatView2x6d = MatView<Scalar, 2, 6>;
+using MatView3x1d = MatView<Scalar, 3, 1>;
 using MatView3x3d = MatView<Scalar, 3, 3>;
 using MatView3x6d = MatView<Scalar, 3, 6>;
+using ConstMatView3x1d = ConstMatView<Scalar, 3, 1>;
 using ConstMatView3x3d = ConstMatView<Scalar, 3, 3>;
+using ConstMatView6x6d = ConstMatView<Scalar, 6, 6>;
+using ConstMatView6x1d = ConstMatView<Scalar, 6, 1>;
 
 ////////////////////////////////////////////////////////////////////////////////////
 // Host functions
@@ -152,7 +156,7 @@ template <int N, int S1, int S2>
 __device__ inline Scalar dot_stride_(const Scalar* a, const Scalar* b)
 {
 	static_assert(S1 == PDIM || S1 == LDIM, "S1 must be PDIM or LDIM");
-	static_assert(S2 == 1 || S2 == PDIM, "S2 must be 1 or PDIM");
+	static_assert(S2 == 1 || S2 == PDIM || S2 == LDIM, "S2 must be 1 or PDIM or LDIM");
 	return dot_stride_<N - 1, S1, S2>(a, b) + a[S1 * (N - 1)] * b[S2 * (N - 1)];
 }
 
@@ -162,6 +166,8 @@ template <>
 __device__ inline Scalar dot_stride_<1, LDIM, 1>(const Scalar* a, const Scalar* b) { return a[0] * b[0]; }
 template <>
 __device__ inline Scalar dot_stride_<1, PDIM, PDIM>(const Scalar* a, const Scalar* b) { return a[0] * b[0]; }
+template <>
+__device__ inline Scalar dot_stride_<1, LDIM, LDIM>(const Scalar* a, const Scalar* b) { return a[0] * b[0]; }
 
 // matrix(tansposed)-vector product: b = AT*x
 template <int M, int N, AssignOP OP = ASSIGN>
@@ -595,6 +601,62 @@ __device__ inline Vec3i makeVec3i(int i, int j, int k)
 	return vec;
 }
 
+__device__ inline  void solveSym3x3(const Scalar* H, const Scalar* b, Scalar* x)
+{
+	Scalar invH[LDIM * LDIM];
+	Sym3x3Inv(H, invH);
+	MatMulVec<3, 3>(invH, b, x);
+}
+
+__device__ inline  void solveSym6x6(const Scalar* _H, const Scalar* _b, Scalar* _x)
+{
+	using Mat3x3d = Matx<Scalar, 3, 3>;
+	using Mat3x1d = Matx<Scalar, 3, 1>;
+	using Mat6x1d = Matx<Scalar, 6, 1>;
+
+	ConstMatView6x6d H(_H);
+	ConstMatView6x1d b(_b);
+	ConstMatView3x1d bp(b.data);
+	ConstMatView3x1d bl(b.data + 3);
+
+	Scalar buf1[LDIM * LDIM], buf2[LDIM * LDIM], buf3[LDIM * LDIM], buf4[LDIM];
+
+	MatView3x3d Hpl(buf1);
+	MatView3x3d Hll(buf2);
+	for (int j = 0; j < 3; j++) for (int i = 0; i < 3; i++) Hpl(i, j) = H(i + 0, j + 3);
+	for (int j = 0; j < 3; j++) for (int i = 0; i < 3; i++) Hll(i, j) = H(i + 3, j + 3);
+
+	Mat6x1d x;
+	MatView3x1d xp(x.data);
+	MatView3x1d xl(x.data + 3);
+	MatView3x3d invHll(buf3), Hpl_invHll(buf2);
+
+	// Hsc = Hpp - Hpl*Hll^-1*HplT
+	Mat3x3d Hsc;
+	for (int j = 0; j < 3; j++) for (int i = 0; i < 3; i++) Hsc(i, j) = H(i, j);
+	Sym3x3Inv(Hll.data, invHll.data);
+	MatMulMat<3, 3, 3>(Hpl.data, invHll.data, Hpl_invHll.data);
+	MatMulMatT<3, 3, 3, DEACCUM>(Hpl_invHll.data, Hpl.data, Hsc.data);
+
+	// bsc = -bp + Hpl*Hll^-1*bl
+	MatView3x1d bsc(buf4);
+	copy<3>(bp.data, bsc.data);
+	MatMulVec<3, 3, 1, DEACCUM>(Hpl_invHll.data, bl.data, bsc.data);
+
+	// Hsc*Δxp = bsc
+	MatView3x3d invHsc(buf2);
+	Sym3x3Inv(Hsc, invHsc);
+	MatMulVec<3, 3>(invHsc.data, bsc.data, xp.data);
+
+	// Hll*Δxl = -bl - HplT*Δxp
+	MatView3x1d cl(buf4);
+	copy<3>(bl.data, cl.data);
+	MatTMulVec<3, 3, DEACCUM>(Hpl.data, xp.data, cl.data, 1);
+	MatMulVec<3, 3>(invHll.data, cl.data, xl.data);
+
+	copy<6>(x.data, _x);
+}
+
 ////////////////////////////////////////////////////////////////////////////////////
 // Robust kernels
 ////////////////////////////////////////////////////////////////////////////////////
@@ -729,7 +791,6 @@ __global__ void constructQuadraticFormKernel(int nedges,
 
 	const int iP = edge2PL[iE][0];
 	const int iL = edge2PL[iE][1];
-	const int iPL = edge2Hpl[iE];
 	const int flag = flags[iE];
 
 	const Vec4d& q = qs[iP];
@@ -765,7 +826,7 @@ __global__ void constructQuadraticFormKernel(int nedges,
 	if (!flag)
 	{
 		// Hpl += = JPT*Ω*JL
-		MatTMulMat<PDIM, MDIM, LDIM, ASSIGN>(JP, JL, Hpl.at(iPL), omega);
+		MatTMulMat<PDIM, MDIM, LDIM, ASSIGN>(JP, JL, Hpl.at(edge2Hpl[iE]), omega);
 	}
 }
 
@@ -1016,6 +1077,24 @@ __global__ void setRowIndKernel(const Vec3i* blockpos, int nblocks, int* rowInd,
 	indexPL[edgeId] = k;
 }
 
+__global__ void solveDiagonalSystemKernel(int size, LxLBlockPtr Hll, Lx1BlockPtr bl, Lx1BlockPtr xl)
+{
+	const int i = blockIdx.x * blockDim.x + threadIdx.x;
+	if (i >= size)
+		return;
+
+	solveSym3x3(Hll.at(i), bl.at(i), xl.at(i));
+}
+
+__global__ void solveDiagonalSystemKernel(int size, PxPBlockPtr Hpp, Px1BlockPtr bp, Px1BlockPtr xp)
+{
+	const int i = blockIdx.x * blockDim.x + threadIdx.x;
+	if (i >= size)
+		return;
+
+	solveSym6x6(Hpp.at(i), bp.at(i), xp.at(i));
+}
+
 ////////////////////////////////////////////////////////////////////////////////////
 // Public functions
 ////////////////////////////////////////////////////////////////////////////////////
@@ -1180,6 +1259,9 @@ void constructQuadraticForm(const GpuVec3d& Xcs, const GpuVec4d& qs, const GpuVe
 template <typename T, int DIM>
 Scalar maxDiagonal_(const DeviceBlockVector<T, DIM, DIM>& D, Scalar* maxD)
 {
+	if (!D.size())
+		return 0;
+
 	constexpr int block = BLOCK_MAX_DIAGONAL;
 	constexpr int grid = 4;
 	const int size = D.size() * DIM;
@@ -1210,6 +1292,9 @@ Scalar maxDiagonal(const GpuLxLBlockVec& Hll, Scalar* maxD)
 template <typename T, int DIM>
 void addLambda_(DeviceBlockVector<T, DIM, DIM>& D, Scalar lambda, DeviceBlockVector<T, DIM, 1>& backup)
 {
+	if (!D.size())
+		return;
+
 	const int size = D.size() * DIM;
 	const int block = 1024;
 	const int grid = divUp(size, block);
@@ -1230,6 +1315,9 @@ void addLambda(GpuLxLBlockVec& Hll, Scalar lambda, GpuLx1BlockVec& backup)
 template <typename T, int DIM>
 void restoreDiagonal_(DeviceBlockVector<T, DIM, DIM>& D, const DeviceBlockVector<T, DIM, 1>& backup)
 {
+	if (!D.size())
+		return;
+
 	const int size = D.size() * DIM;
 	const int block = 1024;
 	const int grid = divUp(size, block);
@@ -1315,6 +1403,9 @@ void schurComplementPost(const GpuLxLBlockVec& invHll, const GpuLx1BlockVec& bl,
 
 void updatePoses(const GpuPx1BlockVec& xp, GpuVec4d& qs, GpuVec3d& ts)
 {
+	if (!xp.size())
+		return;
+
 	const int block = 256;
 	const int grid = divUp(xp.size(), block);
 	updatePosesKernel<<<grid, block>>>(xp.size(), xp, qs, ts);
@@ -1323,6 +1414,9 @@ void updatePoses(const GpuPx1BlockVec& xp, GpuVec4d& qs, GpuVec3d& ts)
 
 void updateLandmarks(const GpuLx1BlockVec& xl, GpuVec3d& Xws)
 {
+	if (!xl.size())
+		return;
+
 	const int block = 1024;
 	const int grid = divUp(xl.size(), block);
 	updateLandmarksKernel<<<grid, block>>>(xl.size(), xl, Xws);
@@ -1336,6 +1430,24 @@ void computeScale(const GpuVec1d& x, const GpuVec1d& b, Scalar* scale, Scalar la
 
 	CUDA_CHECK(cudaMemset(scale, 0, sizeof(Scalar)));
 	computeScaleKernel<<<grid, block>>>(x, b, scale, lambda, x.ssize());
+	CUDA_CHECK(cudaGetLastError());
+}
+
+void solveDiagonalSystem(const GpuLxLBlockVec& Hll, GpuLx1BlockVec& bl, GpuLx1BlockVec& xl)
+{
+	const int size = Hll.size();
+	const int block = 1024;
+	const int grid = divUp(size, block);
+	solveDiagonalSystemKernel<<<grid, block>>>(size, Hll, bl, xl);
+	CUDA_CHECK(cudaGetLastError());
+}
+
+void solveDiagonalSystem(const GpuPxPBlockVec& Hpp, GpuPx1BlockVec& bp, GpuPx1BlockVec& xp)
+{
+	const int size = Hpp.size();
+	const int block = 512;
+	const int grid = divUp(size, block);
+	solveDiagonalSystemKernel<<<grid, block>>>(size, Hpp, bp, xp);
 	CUDA_CHECK(cudaGetLastError());
 }
 

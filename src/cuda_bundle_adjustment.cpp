@@ -87,7 +87,6 @@ public:
 		verticesP_.clear();
 		verticesL_.clear();
 		baseEdges_.clear();
-		HplBlockPos_.clear();
 		qs_.clear();
 		ts_.clear();
 		Xws_.clear();
@@ -96,6 +95,10 @@ public:
 		omegas_.clear();
 		edge2PL_.clear();
 		edgeFlags_.clear();
+		HplBlockPos_.clear();
+
+		numP_ = numL_ = nedges2D_ = nedges3D_ = nHplBlocks_ = 0;
+		optimizeP_ = optimizeL_ = false;
 	}
 
 	void initialize(const VertexMapP& vertexMapP, const VertexMapL& vertexMapL,
@@ -103,23 +106,20 @@ public:
 	{
 		const auto t0 = get_time_point();
 
-		nedges2D_ = static_cast<int>(edgeSet2D.size());
-		nedges3D_ = static_cast<int>(edgeSet3D.size());
-
 		clear();
 
 		verticesP_.reserve(vertexMapP.size());
 		verticesL_.reserve(vertexMapL.size());
-		baseEdges_.reserve(nedges2D_ + nedges3D_);
-		HplBlockPos_.reserve(nedges2D_ + nedges3D_);
+		baseEdges_.reserve(edgeSet2D.size() + edgeSet3D.size());
+		HplBlockPos_.reserve(edgeSet2D.size() + edgeSet3D.size());
 		qs_.reserve(vertexMapP.size());
 		ts_.reserve(vertexMapP.size());
 		Xws_.reserve(vertexMapL.size());
-		measurements2D_.reserve(nedges2D_);
-		measurements3D_.reserve(nedges3D_);
-		omegas_.reserve(nedges2D_ + nedges3D_);
-		edge2PL_.reserve(nedges2D_ + nedges3D_);
-		edgeFlags_.reserve(nedges2D_ + nedges3D_);
+		measurements2D_.reserve(edgeSet2D.size());
+		measurements3D_.reserve(edgeSet3D.size());
+		omegas_.reserve(edgeSet2D.size() + edgeSet3D.size());
+		edge2PL_.reserve(edgeSet2D.size() + edgeSet3D.size());
+		edgeFlags_.reserve(edgeSet2D.size() + edgeSet3D.size());
 
 		std::vector<VertexP*> fixedVerticesP_;
 		std::vector<VertexL*> fixedVerticesL_;
@@ -161,6 +161,8 @@ public:
 
 		numP_ = numP;
 		numL_ = numL;
+		optimizeP_ = numP_ > 0;
+		optimizeL_ = numL_ > 0;
 
 		// inactive(fixed) vertices are added after active vertices
 		for (auto vertexP : fixedVerticesP_)
@@ -179,23 +181,25 @@ public:
 		}
 
 		// gather each edge members into each vector
-		int edgeId = 0;
+		int edgeId = 0, nedges2D = 0, nedges3D = 0;
 		for (const auto e : edgeSet2D)
 		{
 			const auto vertexP = e->vertexP;
 			const auto vertexL = e->vertexL;
 
-			baseEdges_.push_back(e);
-
 			if (!vertexP->fixed && !vertexL->fixed)
 				HplBlockPos_.push_back({ vertexP->iP, vertexL->iL, edgeId });
 
-			measurements2D_.emplace_back(e->measurement.data());
-			omegas_.push_back(ScalarCast(e->information));
-			edge2PL_.push_back({ vertexP->iP, vertexL->iL });
-			edgeFlags_.push_back(makeEdgeFlag(vertexP->fixed, vertexL->fixed));
-
-			edgeId++;
+			if (!vertexP->fixed || !vertexL->fixed)
+			{
+				baseEdges_.push_back(e);
+				measurements2D_.emplace_back(e->measurement.data());
+				omegas_.push_back(ScalarCast(e->information));
+				edge2PL_.push_back({ vertexP->iP, vertexL->iL });
+				edgeFlags_.push_back(makeEdgeFlag(vertexP->fixed, vertexL->fixed));
+				edgeId++;
+				nedges2D++;
+			}
 		}
 
 		// gather each edge members into each vector
@@ -204,19 +208,23 @@ public:
 			const auto vertexP = e->vertexP;
 			const auto vertexL = e->vertexL;
 
-			baseEdges_.push_back(e);
-			
 			if (!vertexP->fixed && !vertexL->fixed)
 				HplBlockPos_.push_back({ vertexP->iP, vertexL->iL, edgeId });
 
-			measurements3D_.emplace_back(e->measurement.data());
-			omegas_.push_back(ScalarCast(e->information));
-			edge2PL_.push_back({ vertexP->iP, vertexL->iL });
-			edgeFlags_.push_back(makeEdgeFlag(vertexP->fixed, vertexL->fixed));
-
-			edgeId++;
+			if (!vertexP->fixed || !vertexL->fixed)
+			{
+				baseEdges_.push_back(e);
+				measurements3D_.emplace_back(e->measurement.data());
+				omegas_.push_back(ScalarCast(e->information));
+				edge2PL_.push_back({ vertexP->iP, vertexL->iL });
+				edgeFlags_.push_back(makeEdgeFlag(vertexP->fixed, vertexL->fixed));
+				edgeId++;
+				nedges3D++;
+			}
 		}
 
+		nedges2D_ = nedges2D;
+		nedges3D_ = nedges3D;
 		nHplBlocks_ = static_cast<int>(HplBlockPos_.size());
 
 		// upload camera parameters to constant memory
@@ -246,49 +254,60 @@ public:
 	{
 		const auto t0 = get_time_point();
 
-		// build Hpl block matrix structure
-		d_Hpl_.resize(numP_, numL_);
-		d_Hpl_.resizeNonZeros(nHplBlocks_);
-
-		d_HplBlockPos_.assign(nHplBlocks_, HplBlockPos_.data());
-		d_nnzPerCol_.resize(numL_ + 1);
-		d_edge2Hpl_.resize(baseEdges_.size());
-
-		gpu::buildHplStructure(d_HplBlockPos_, d_Hpl_, d_edge2Hpl_, d_nnzPerCol_);
-
-		// build Hschur block matrix structure
-		Hsc_.resize(numP_, numP_);
-		Hsc_.constructFromVertices(verticesL_);
-		Hsc_.convertBSRToCSR();
-
-		d_Hsc_.resize(numP_, numP_);
-		d_Hsc_.resizeNonZeros(Hsc_.nblocks());
-		d_Hsc_.upload(nullptr, Hsc_.outerIndices(), Hsc_.innerIndices());
-
-		d_HscCSR_.resize(Hsc_.nnzSymm());
-		d_BSR2CSR_.assign(Hsc_.nnzSymm(), (int*)Hsc_.BSR2CSR());
-
-		d_HscMulBlockIds_.resize(Hsc_.nmulBlocks());
-		gpu::findHschureMulBlockIndices(d_Hpl_, d_Hsc_, d_HscMulBlockIds_);
-
 		// allocate device buffers
 		d_x_.resize(numP_ * PDIM + numL_ * LDIM);
 		d_b_.resize(numP_ * PDIM + numL_ * LDIM);
 
-		d_xp_.map(numP_, d_x_.data());
-		d_bp_.map(numP_, d_b_.data());
-		d_xl_.map(numL_, d_x_.data() + numP_ * PDIM);
-		d_bl_.map(numL_, d_b_.data() + numP_ * PDIM);
+		if (optimizeP_)
+		{
+			d_xp_.map(numP_, d_x_.data());
+			d_bp_.map(numP_, d_b_.data());
+			d_Hpp_.resize(numP_);
+			d_HppBackup_.resize(numP_);
+		}
 
-		d_Hpp_.resize(numP_);
-		d_Hll_.resize(numL_);
+		if (optimizeL_)
+		{
+			d_xl_.map(numL_, d_x_.data() + numP_ * PDIM);
+			d_bl_.map(numL_, d_b_.data() + numP_ * PDIM);
+			d_Hll_.resize(numL_);
+			d_HllBackup_.resize(numL_);
+		}
 
-		d_HppBackup_.resize(numP_);
-		d_HllBackup_.resize(numL_);
+		if (optimizeP_ && optimizeL_)
+		{
+			// build Hpl block matrix structure
+			d_Hpl_.resize(numP_, numL_);
+			d_Hpl_.resizeNonZeros(nHplBlocks_);
 
-		d_bsc_.resize(numP_);
-		d_invHll_.resize(numL_);
-		d_Hpl_invHll_.resize(nHplBlocks_);
+			d_HplBlockPos_.assign(nHplBlocks_, HplBlockPos_.data());
+			d_nnzPerCol_.resize(numL_ + 1);
+			d_edge2Hpl_.resize(baseEdges_.size());
+
+			gpu::buildHplStructure(d_HplBlockPos_, d_Hpl_, d_edge2Hpl_, d_nnzPerCol_);
+
+			// build Hschur block matrix structure
+			Hsc_.resize(numP_, numP_);
+			Hsc_.constructFromVertices(verticesL_);
+			Hsc_.convertBSRToCSR();
+
+			d_Hsc_.resize(numP_, numP_);
+			d_Hsc_.resizeNonZeros(Hsc_.nblocks());
+			d_Hsc_.upload(nullptr, Hsc_.outerIndices(), Hsc_.innerIndices());
+
+			d_HscCSR_.resize(Hsc_.nnzSymm());
+			d_BSR2CSR_.assign(Hsc_.nnzSymm(), (int*)Hsc_.BSR2CSR());
+
+			d_HscMulBlockIds_.resize(Hsc_.nmulBlocks());
+			gpu::findHschureMulBlockIndices(d_Hpl_, d_Hsc_, d_HscMulBlockIds_);
+
+			d_bsc_.resize(numP_);
+			d_invHll_.resize(numL_);
+			d_Hpl_invHll_.resize(nHplBlocks_);
+
+			d_edge2Hpl2D_.map(nedges2D_, d_edge2Hpl_.data());
+			d_edge2Hpl3D_.map(nedges3D_, d_edge2Hpl_.data() + nedges2D_);
+		}
 
 		// upload solutions to device memory
 		d_solution_.resize(verticesP_.size() * 7 + verticesL_.size() * 3);
@@ -297,7 +316,7 @@ public:
 		d_qs_.map(qs_.size(), d_solution_.data());
 		d_ts_.map(ts_.size(), d_qs_.data() + d_qs_.size());
 		d_Xws_.map(Xws_.size(), d_ts_.data() + d_ts_.size());
-		
+
 		d_qs_.upload(qs_.data());
 		d_ts_.upload(ts_.data());
 		d_Xws_.upload(Xws_.data());
@@ -315,14 +334,13 @@ public:
 		d_edge2PL3D_.assign(nedges3D_, edge2PL_.data() + nedges2D_);
 		d_edgeFlags2D_.assign(nedges2D_, edgeFlags_.data());
 		d_edgeFlags3D_.assign(nedges3D_, edgeFlags_.data() + nedges2D_);
-		d_edge2Hpl2D_.map(nedges2D_, d_edge2Hpl_.data());
-		d_edge2Hpl3D_.map(nedges3D_, d_edge2Hpl_.data() + nedges2D_);
 		d_chi_.resize(1);
 
 		const auto t1 = get_time_point();
 
 		// analyze pattern of Hschur matrix (symbolic decomposition)
-		linearSolver_->initialize(Hsc_);
+		if (optimizeP_ && optimizeL_)
+			linearSolver_->initialize(Hsc_);
 
 		const auto t2 = get_time_point();
 
@@ -396,38 +414,51 @@ public:
 
 	bool solve()
 	{
-		const auto t0 = get_time_point();
+		if (optimizeP_ && optimizeL_)
+		{
+			const auto t0 = get_time_point();
 
-		////////////////////////////////////////////////////////////////////////////////////
-		// Schur complement
-		// bSc = -bp + Hpl*Hll^-1*bl
-		// HSc = Hpp - Hpl*Hll^-1*HplT
-		////////////////////////////////////////////////////////////////////////////////////
-		gpu::computeBschure(d_bp_, d_Hpl_, d_Hll_, d_bl_, d_bsc_, d_invHll_, d_Hpl_invHll_);
-		gpu::computeHschure(d_Hpp_, d_Hpl_invHll_, d_Hpl_, d_HscMulBlockIds_, d_Hsc_);
-		
-		const auto t1 = get_time_point();
+			////////////////////////////////////////////////////////////////////////////////////
+			// Schur complement
+			// bSc = -bp + Hpl*Hll^-1*bl
+			// HSc = Hpp - Hpl*Hll^-1*HplT
+			////////////////////////////////////////////////////////////////////////////////////
+			gpu::computeBschure(d_bp_, d_Hpl_, d_Hll_, d_bl_, d_bsc_, d_invHll_, d_Hpl_invHll_);
+			gpu::computeHschure(d_Hpp_, d_Hpl_invHll_, d_Hpl_, d_HscMulBlockIds_, d_Hsc_);
 
-		////////////////////////////////////////////////////////////////////////////////////
-		// Solve linear equation about Δxp
-		// HSc*Δxp = bp
-		////////////////////////////////////////////////////////////////////////////////////
-		gpu::convertHschureBSRToCSR(d_Hsc_, d_BSR2CSR_, d_HscCSR_);
-		const bool success = linearSolver_->solve(d_HscCSR_, d_bsc_.values(), d_xp_.values());
-		if (!success)
-			return false;
+			const auto t1 = get_time_point();
 
-		const auto t2 = get_time_point();
+			////////////////////////////////////////////////////////////////////////////////////
+			// Solve linear equation about Δxp
+			// HSc*Δxp = bp
+			////////////////////////////////////////////////////////////////////////////////////
+			gpu::convertHschureBSRToCSR(d_Hsc_, d_BSR2CSR_, d_HscCSR_);
+			const bool success = linearSolver_->solve(d_HscCSR_, d_bsc_.values(), d_xp_.values());
+			if (!success)
+				return false;
 
-		////////////////////////////////////////////////////////////////////////////////////
-		// Solve linear equation about Δxl
-		// Hll*Δxl = -bl - HplT*Δxp
-		////////////////////////////////////////////////////////////////////////////////////
-		gpu::schurComplementPost(d_invHll_, d_bl_, d_Hpl_, d_xp_, d_xl_);
+			const auto t2 = get_time_point();
 
-		const auto t3 = get_time_point();
-		profItems_[PROF_ITEM_SCHUR_COMPLEMENT] += (get_duration(t0, t1) + get_duration(t2, t3));
-		profItems_[PROF_ITEM_DECOMP_NUMERICAL] += get_duration(t1, t2);
+			////////////////////////////////////////////////////////////////////////////////////
+			// Solve linear equation about Δxl
+			// Hll*Δxl = -bl - HplT*Δxp
+			////////////////////////////////////////////////////////////////////////////////////
+			gpu::schurComplementPost(d_invHll_, d_bl_, d_Hpl_, d_xp_, d_xl_);
+
+			const auto t3 = get_time_point();
+			profItems_[PROF_ITEM_SCHUR_COMPLEMENT] += (get_duration(t0, t1) + get_duration(t2, t3));
+			profItems_[PROF_ITEM_DECOMP_NUMERICAL] += get_duration(t1, t2);
+		}
+		// pose only optimization
+		else if (optimizeP_)
+		{
+			gpu::solveDiagonalSystem(d_Hpp_, d_bp_, d_xp_);
+		}
+		// landmark only optimization
+		else
+		{
+			gpu::solveDiagonalSystem(d_Hll_, d_bl_, d_xl_);
+		}
 
 		return true;
 	}
@@ -515,6 +546,7 @@ private:
 	std::vector<VertexL*> verticesL_;
 	std::vector<BaseEdge*> baseEdges_;
 	int numP_, numL_, nedges2D_, nedges3D_;
+	bool optimizeP_, optimizeL_;
 
 	// solution vectors
 	std::vector<Vec4d> qs_;
