@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.7)
+cmake_minimum_required(VERSION 3.18)
 
 project(sample_comparison_with_g2o)
 
