@@ -21,7 +21,7 @@ limitations under the License.
 #include <opencv2/core.hpp>
 
 #include <cuda_bundle_adjustment.h>
-#include <object_creator.h>
+#include "object_creator.h"
 
 static cuba::CudaBundleAdjustment::Ptr readGraph(const std::string& filename);
 
