@@ -141,6 +141,9 @@ public:
 		// gather rotations and translations into each vector
 		for (const auto& [id, vertexP] : vertexMapP)
 		{
+			if (vertexP->edges.empty())
+				continue;
+
 			if (!vertexP->fixed)
 			{
 				vertexP->iP = numP++;
@@ -159,6 +162,9 @@ public:
 		// gather 3D positions into vector
 		for (const auto& [id, vertexL] : vertexMapL)
 		{
+			if (vertexL->edges.empty())
+				continue;
+
 			if (!vertexL->fixed)
 			{
 				vertexL->iL = numL++;
