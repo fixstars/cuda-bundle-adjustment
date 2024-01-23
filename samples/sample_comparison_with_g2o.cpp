@@ -29,7 +29,7 @@ limitations under the License.
 #include <g2o/core/robust_kernel_impl.h>
 
 #include <cuda_bundle_adjustment.h>
-#include <object_creator.h>
+#include "object_creator.h"
 
 using OptimizerCPU = g2o::SparseOptimizer;
 using OptimizerGPU = cuba::CudaBundleAdjustment;

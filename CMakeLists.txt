@@ -13,8 +13,5 @@ set(CUDA_ARCHS "61;72;75;86" CACHE STRING "List of architectures to generate dev
 add_subdirectory(src)
 
 if(ENABLE_SAMPLES)
-	add_subdirectory(samples/sample_ba_from_file)
-	if(WITH_G2O)
-		add_subdirectory(samples/sample_comparison_with_g2o)
-	endif()
+	add_subdirectory(samples)
 endif()
