@@ -178,8 +178,8 @@ static void readGraph(const std::string& filename, OptimizerCPU& optimizerCPU, O
 	poseIds.clear();
 	landmarkIds.clear();
 
-	auto linearSolver = g2o::make_unique<g2o::LinearSolverEigen<g2o::BlockSolver_6_3::PoseMatrixType>>();
-	auto blockSolver = g2o::make_unique<g2o::BlockSolver_6_3>(std::move(linearSolver));
+	auto linearSolver = std::make_unique<g2o::LinearSolverEigen<g2o::BlockSolver_6_3::PoseMatrixType>>();
+	auto blockSolver = std::make_unique<g2o::BlockSolver_6_3>(std::move(linearSolver));
 	auto algorithm = new g2o::OptimizationAlgorithmLevenberg(std::move(blockSolver));
 	optimizerCPU.setAlgorithm(algorithm);
 	optimizerCPU.setComputeBatchStatistics(true);
