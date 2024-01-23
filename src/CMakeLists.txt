@@ -19,7 +19,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE ${INTERNAL_INCLUDE_DIR} ${EIG
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_17)
 target_link_libraries(${PROJECT_NAME} PUBLIC CUDA::cudart CUDA::cusparse CUDA::cusolver)
 set_target_properties(${PROJECT_NAME} PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${INTERFACE_INCLUDE_DIR})
-set_target_properties(${PROJECT_NAME} PROPERTIES CUDA_ARCHITECTURES ${CUDA_ARCHS})
+set_target_properties(${PROJECT_NAME} PROPERTIES CUDA_ARCHITECTURES "${CUDA_ARCHS}")
 
 target_compile_options(${PROJECT_NAME} PRIVATE
 $<$<COMPILE_LANG_AND_ID:CXX,GNU>:-Wall -O3>
