@@ -6,14 +6,16 @@ This project implements a Bundle Adjustment algorithm with CUDA.
 It optimizes camera poses and landmarks (3D points) represented by a graph.
 
 The reference CPU implementation is [RainerKuemmerle/g2o](https://github.com/RainerKuemmerle/g2o).
-This project is designed to provide following g2o features, which are commonly used in Visual SLAM.
+This project is designed to provide following g2o features, which are commonly used in Visual SLAM and SfM.
 
 - `g2o::BlockSolver_6_3`
 - `g2o::OptimizationAlgorithmLevenberg`
 - `g2o::VertexSE3Expmap`
-- `g2o::VertexSBAPointXYZ`
+- `g2o::VertexPointXYZ`
 - `g2o::EdgeSE3ProjectXYZ`
 - `g2o::EdgeStereoSE3ProjectXYZ`
+- `g2o::RobustKernelHuber`
+- `g2o::RobustKernelTukey`
 
 For example, see [Use cuda-bundle-adjustment in ORB-SLAM2](https://github.com/fixstars/cuda-bundle-adjustment/wiki/Use-cuda-bundle-adjustment-in-ORB-SLAM2).
 
@@ -42,6 +44,7 @@ Some features supported in g2o are currently simplified or not implemented.
 
 - Information matrix is represented by a scalar
 - Camera parameters are associated with each of the pose vertices (not each of the edges)
+- Robust kernel is applied uniformly for all monocular(stereo) edges
 - Level optimization is not implemented
 
 ## Requirements
