@@ -72,6 +72,7 @@ $ make
 |ENABLE_SAMPLES|Build samples|`ON`|
 |WITH_G2O|Build sample with g2o|`OFF`|
 |USE_FLOAT32|Use 32bit float in internal floating-point operations|`OFF`|
+|BUILD_SHARED_LIB|Build shared library|`OFF`|
 |CUDA_ARCHS|List of architectures to generate device code for|`61;72;75;86`|
 
 With `WITH_G2O` option, you can run `sample/sample_comparison_with_g2o`.
