@@ -11,9 +11,15 @@ project(${PROJECT_NAME} LANGUAGES CXX CUDA)
 find_package(Eigen3 REQUIRED)
 find_package(CUDAToolkit REQUIRED)
 
+# library type
+set(LIBRARY_TYPE STATIC)
+if(BUILD_SHARED_LIB)
+	set(LIBRARY_TYPE SHARED)
+endif()
+
 # target configuration
 file(GLOB SRCS ./*.cpp ./*.cu ./*.h* ${INTERNAL_INCLUDE_DIR}/*.h*)
-add_library(${PROJECT_NAME})
+add_library(${PROJECT_NAME} ${LIBRARY_TYPE})
 target_sources(${PROJECT_NAME} PRIVATE ${SRCS})
 target_include_directories(${PROJECT_NAME} PRIVATE ${INTERNAL_INCLUDE_DIR} ${EIGEN3_INCLUDE_DIR} ${CUDAToolkit_INCLUDE_DIRS})
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_17)
